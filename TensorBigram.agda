@@ -436,10 +436,10 @@ buildCorpus : List String → List Char
 buildCorpus names = toList (foldr (λ name acc → "." String.++ name String.++ acc) "." names)
 
 trainNames : ℕ
-trainNames = 20
+trainNames = 50
 
 evalNames : ℕ
-evalNames = 20
+evalNames = 50
 
 -- ═══════════════════════════════════════════════════════════
 -- SECTION 13: MAIN
@@ -492,36 +492,44 @@ main = run do
     String.++ ℕShow.show nEvalChars String.++ " chars")
   putStrLn ""
 
+  -- Build a small 20-name corpus for cross-comparison
+  let smallNameList = take 20 allNames
+  let smallCorpus   = buildCorpus smallNameList
+
   -- Initialize
   let θ₀ = initSmall totalParams
   let s₀ = tensorAvgScore θ₀ trainCorpus
-  putStrLn ("Initial NLL (train): " String.++ Float.show (0.0 Float.- s₀))
+  putStrLn ("Initial NLL (50-name train): " String.++ Float.show (0.0 Float.- s₀))
   putStrLn ""
 
-  -- Train in stages to show convergence
-  putStrLn "Training..."
-  let θ₅ = train 5 θ₀ trainCorpus
-  let s₅ = tensorAvgScore θ₅ trainCorpus
-  putStrLn ("  step   5: train NLL = " String.++ Float.show (0.0 Float.- s₅))
-
-  let θ₁₀ = train 5 θ₅ trainCorpus
+  -- === COMPARISON POINT 1: 50 names, 10 steps ===
+  putStrLn "Training on 50 names..."
+  let θ₁₀ = train 10 θ₀ trainCorpus
   let s₁₀ = tensorAvgScore θ₁₀ trainCorpus
-  putStrLn ("  step  10: train NLL = " String.++ Float.show (0.0 Float.- s₁₀))
+  putStrLn ("  step 10: train NLL (50 names) = " String.++ Float.show (0.0 Float.- s₁₀))
 
-  let θfinal = θ₁₀
-  let sFinal = s₁₀
+  -- === COMPARISON POINT 2: 50 names, 25 steps ===
+  let θ₂₅ = train 15 θ₁₀ trainCorpus
+  let s₂₅ = tensorAvgScore θ₂₅ trainCorpus
+  putStrLn ("  step 25: train NLL (50 names) = " String.++ Float.show (0.0 Float.- s₂₅))
   putStrLn ""
 
-  -- Evaluate on eval corpus
+  -- Also report on 20-name corpus for cross-comparison
+  let s₂₅small = tensorAvgScore θ₂₅ smallCorpus
+  putStrLn ("  step 25: train NLL (20 names) = " String.++ Float.show (0.0 Float.- s₂₅small))
+  putStrLn ""
+
+  -- Evaluate
   putStrLn ("Evaluating on " String.++ ℕShow.show nEvalNames String.++ " names...")
-  let sEval = tensorAvgScore θfinal evalCorpus
+  let sEval = tensorAvgScore θ₂₅ evalCorpus
   putStrLn ""
 
   -- Report
-  putStrLn "=== Results ==="
-  putStrLn ("  Train NLL (" String.++ ℕShow.show nTrainNames String.++ " names):   "
-    String.++ Float.show (0.0 Float.- sFinal))
-  putStrLn ("  Eval NLL  (" String.++ ℕShow.show nEvalNames String.++ " names):  "
+  putStrLn "=== COMPARISON RESULTS ==="
+  putStrLn ("  [10 steps, 50 names]  Train NLL = " String.++ Float.show (0.0 Float.- s₁₀))
+  putStrLn ("  [25 steps, 50 names]  Train NLL = " String.++ Float.show (0.0 Float.- s₂₅))
+  putStrLn ("  [25 steps, 20 names]  Train NLL = " String.++ Float.show (0.0 Float.- s₂₅small))
+  putStrLn ("  Eval NLL (" String.++ ℕShow.show nEvalNames String.++ " names):  "
     String.++ Float.show (0.0 Float.- sEval))
   putStrLn ""
   putStrLn "  Benchmarks:"
@@ -531,7 +539,7 @@ main = run do
   putStrLn ""
 
   -- Generate
-  let p = tensorPredictor θfinal
+  let p = tensorPredictor θ₂₅
   putStrLn "Generated names (greedy decoding):"
   putStrLn ("  " String.++ fromList (generateName p 20 (toList ".")))
   putStrLn ("  " String.++ fromList (generateName p 20 (toList ".a")))

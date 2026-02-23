@@ -427,14 +427,28 @@ main = run do
     String.++ ℕShow.show nEvalChars String.++ " chars")
   putStrLn ""
 
+  -- Build a small 20-name corpus for cross-comparison
+  let smallNameList = take 20 allNames
+  let smallCorpus   = buildCorpus smallNameList
+
   -- Initialize
   let θ₀ = initSmall totalParams
 
-  -- Train: 25 steps on 50 names
-  putStrLn "Training 25 steps with reverse-mode AD..."
-  let θfinal = train 25 θ₀ trainCorpus
+  -- === COMPARISON POINT 1: 50 names, 10 steps ===
+  putStrLn "Training with reverse-mode AD..."
+  let θ₁₀ = train 10 θ₀ trainCorpus
+  let s₁₀ = mlpAvgScore θ₁₀ trainCorpus
+  putStrLn ("  step 10: train NLL (50 names) = " String.++ Float.show (0.0 Float.- s₁₀))
+
+  -- === COMPARISON POINT 2: 50 names, 25 steps ===
+  let θfinal = train 15 θ₁₀ trainCorpus
   let sFinal = mlpAvgScore θfinal trainCorpus
-  putStrLn ("  train NLL = " String.++ Float.show (0.0 Float.- sFinal))
+  putStrLn ("  step 25: train NLL (50 names) = " String.++ Float.show (0.0 Float.- sFinal))
+  putStrLn ""
+
+  -- Also report on 20-name corpus for cross-comparison
+  let s₂₅small = mlpAvgScore θfinal smallCorpus
+  putStrLn ("  step 25: train NLL (20 names) = " String.++ Float.show (0.0 Float.- s₂₅small))
   putStrLn ""
 
   -- Evaluate on larger corpus
@@ -443,20 +457,17 @@ main = run do
   putStrLn ""
 
   -- Report
-  putStrLn "=== Results ==="
-  putStrLn ("  Train NLL (" String.++ ℕShow.show nTrainNames String.++ " names):    "
-    String.++ Float.show (0.0 Float.- sFinal))
-  putStrLn ("  Eval NLL  (" String.++ ℕShow.show nEvalNames String.++ " names):   "
+  putStrLn "=== COMPARISON RESULTS ==="
+  putStrLn ("  [10 steps, 50 names]  Train NLL = " String.++ Float.show (0.0 Float.- s₁₀))
+  putStrLn ("  [25 steps, 50 names]  Train NLL = " String.++ Float.show (0.0 Float.- sFinal))
+  putStrLn ("  [25 steps, 20 names]  Train NLL = " String.++ Float.show (0.0 Float.- s₂₅small))
+  putStrLn ("  Eval NLL (" String.++ ℕShow.show nEvalNames String.++ " names):   "
     String.++ Float.show (0.0 Float.- sEval))
   putStrLn ""
   putStrLn "  Benchmarks (Karpathy, 32k names, full training):"
   putStrLn "    Bigram (count-based):         2.454"
   putStrLn "    MLP (Bengio et al.):          ~2.3"
-  putStrLn ""
-  putStrLn "  Note: Our eval uses only 50 training names and 25 gradient"
-  putStrLn "  steps due to Agda runtime constraints. Karpathy uses 32k"
-  putStrLn "  names and ~200k steps. The gap reflects data/compute limits,"
-  putStrLn "  not architecture — the same MLP trained fully would match."
+  putStrLn "    Uniform random:               3.296"
   putStrLn ""
 
   -- Generate
