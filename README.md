@@ -27,6 +27,14 @@ We've built the algebraic framework and proven the key structural theorems. Diff
 
 **The open question:** In Conal's work, new algorithms genuinely *fell out* of the algebra — reverse-mode AD via continuations was a surprise. We haven't gotten there yet for text prediction. We have an elegant unified explanation of *why* existing architectures work, but we haven't yet derived a novel architecture or optimization that nobody knew about. That's the goal — uncovering new representations of the Kleisli morphism that are interesting architectures, or new optimization strategies suggested by the algebraic structure.
 
+## Next steps
+
+1. **Scale BigramCount to 32k names** — currently uses 50 hardcoded names; read from `names.txt` and match Karpathy's NLL = 2.454 benchmark
+2. **Executable MLP** — Karpathy's makemore part 2: fixed context window, character embeddings, hidden layer. The natural next architecture on the progression.
+3. **Wire AD into training** — `Bigram.agda` uses numerical perturbation for gradients; connect `AD.agda`'s dual numbers for exact forward-mode gradients
+4. **Reverse-mode AD** — Conal's key result: reverse-mode = continuations as representation of linear maps. Practically necessary for training anything bigger than a bigram, and the exact place where a representation choice yields an algorithm.
+5. **Novel representations** — the real goal. What other representations of `List Char → Char → ℝ` exist beyond the known architectures? Can the algebraic structure suggest one?
+
 ## Module dependencies
 
 ```mermaid
