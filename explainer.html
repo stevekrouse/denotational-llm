@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Why Attention? An Algebraic Explanation</title>
+<style>
+/* ============================================================
+   GLOBAL RESET & TYPOGRAPHY
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --text: #1a1a2e;
+  --text-light: #555;
+  --accent: #e07a5f;
+  --accent-hover: #c4573e;
+  --teal: #3d5a80;
+  --teal-light: #5e8ab4;
+  --bg: #ffffff;
+  --bg-alt: #f8f9fa;
+  --bg-code: #f0f1f3;
+  --border: #e0e0e0;
+  --shadow: rgba(0,0,0,0.06);
+  --font-serif: Georgia, 'Times New Roman', serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+html { font-size: 18px; scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-serif);
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.container {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+header {
+  padding: 4rem 0 2rem;
+  text-align: center;
+}
+
+header h1 {
+  font-size: 2.4rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.6rem;
+}
+
+header .subtitle {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  color: var(--text-light);
+  font-weight: 400;
+}
+
+section {
+  padding: 2.5rem 0;
+  border-top: 1px solid var(--border);
+}
+
+section h2 {
+  font-size: 1.6rem;
+  margin-bottom: 1rem;
+  color: var(--teal);
+  letter-spacing: -0.01em;
+}
+
+section h3 {
+  font-size: 1.15rem;
+  margin: 1.5rem 0 0.6rem;
+  color: var(--text);
+}
+
+p { margin-bottom: 1rem; }
+
+.aside {
+  background: var(--bg-alt);
+  border-left: 3px solid var(--teal);
+  padding: 1rem 1.2rem;
+  margin: 1.5rem 0;
+  font-size: 0.92rem;
+  border-radius: 0 6px 6px 0;
+}
+
+.aside strong { color: var(--teal); }
+
+.highlight { color: var(--accent); font-weight: 600; }
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--bg-code);
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+}
+
+/* ============================================================
+   INTERACTIVE PANELS
+   ============================================================ */
+.interactive {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  box-shadow: 0 2px 12px var(--shadow);
+}
+
+.interactive-label {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 0.8rem;
+}
+
+/* ============================================================
+   BUTTONS & CONTROLS
+   ============================================================ */
+button, .btn {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  padding: 0.4em 0.9em;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+button:hover { border-color: var(--teal); color: var(--teal); }
+button.active {
+  background: var(--teal);
+  color: white;
+  border-color: var(--teal);
+}
+
+.name-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+/* ============================================================
+   SVG & CANVAS
+   ============================================================ */
+svg text {
+  font-family: var(--font-sans);
+  fill: var(--text);
+}
+
+.bar-chart rect { transition: width 0.35s ease, fill 0.2s; }
+.bar-chart text { font-size: 11px; }
+
+/* ============================================================
+   SECTION 1: PREDICTION
+   ============================================================ */
+.typed-name {
+  font-family: var(--font-mono);
+  font-size: 2rem;
+  letter-spacing: 0.08em;
+  text-align: center;
+  margin-bottom: 1rem;
+  min-height: 2.8rem;
+}
+
+.typed-name .past { color: var(--teal); }
+.typed-name .cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.8rem;
+  background: var(--accent);
+  margin-left: 2px;
+  animation: blink 1s step-end infinite;
+  vertical-align: text-bottom;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+.typed-name .next-char { color: var(--accent); opacity: 0.5; }
+
+.prediction-bars-wrap {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.prediction-bars-wrap svg { flex: 1; }
+
+.surprise-display {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  text-align: center;
+  margin-top: 0.6rem;
+  color: var(--text-light);
+}
+
+.surprise-display .val {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 1.1rem;
+}
+
+.playback-controls {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+  align-items: center;
+}
+
+.playback-controls input[type="range"] {
+  width: 200px;
+  accent-color: var(--teal);
+}
+
+/* ============================================================
+   SECTION 2: MONOID SPLIT
+   ============================================================ */
+.split-display {
+  text-align: center;
+  margin: 1rem 0;
+}
+
+.split-word {
+  font-family: var(--font-mono);
+  font-size: 1.8rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  user-select: none;
+  display: inline-block;
+  position: relative;
+}
+
+.split-word .left-part { color: var(--teal); }
+.split-word .right-part { color: var(--accent); }
+.split-word .split-bar {
+  display: inline-block;
+  width: 2px;
+  height: 1.6rem;
+  background: var(--text);
+  margin: 0 1px;
+  vertical-align: text-bottom;
+}
+
+.split-eq {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  gap: 0.6rem;
+  align-items: center;
+  margin: 1.2rem 0;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+}
+
+.split-box {
+  text-align: center;
+  padding: 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.split-box.full { border-color: var(--text); }
+.split-box.left { border-color: var(--teal); background: rgba(61,90,128,0.05); }
+.split-box.right { border-color: var(--accent); background: rgba(224,122,95,0.05); }
+
+.split-op { font-size: 1.5rem; text-align: center; color: var(--text-light); }
+
+.split-hint {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--text-light);
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
+/* ============================================================
+   SECTION 3: EMBEDDINGS & OUTER PRODUCT
+   ============================================================ */
+.embed-viz {
+  display: flex;
+  gap: 1.2rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.embed-viz > div { flex: 1; min-width: 200px; }
+
+.embed-scatter {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.heatmap-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.heatmap-wrap canvas {
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  image-rendering: pixelated;
+}
+
+.heatmap-label {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--text-light);
+  margin-top: 0.4rem;
+}
+
+.section3-controls {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   SECTION 4: ATTENTION HEADS
+   ============================================================ */
+.heads-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1rem 0;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+}
+
+.heads-slider-wrap input[type="range"] {
+  flex: 1;
+  max-width: 300px;
+  accent-color: var(--accent);
+}
+
+.heads-slider-wrap .heads-val {
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 2em;
+  text-align: center;
+}
+
+.nll-chart-wrap {
+  margin: 1.5rem 0;
+}
+
+.nll-chart-wrap svg {
+  width: 100%;
+  overflow: visible;
+}
+
+.heads-visual {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 1rem 0;
+}
+
+.head-card {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  transition: all 0.3s;
+  background: var(--bg);
+}
+
+.head-card.active-head {
+  border-color: var(--accent);
+  background: rgba(224,122,95,0.08);
+  transform: scale(1.05);
+}
+
+.head-card .head-icon {
+  font-size: 1.4rem;
+  margin-bottom: 0.2rem;
+}
+
+/* ============================================================
+   SECTION 5: PUNCHLINE
+   ============================================================ */
+.comparison-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+  margin: 1.5rem 0;
+}
+
+.comparison-col {
+  padding: 1.2rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.comparison-col.ours {
+  border-color: var(--teal);
+  background: rgba(61,90,128,0.04);
+}
+
+.comparison-col.gpt {
+  border-color: var(--accent);
+  background: rgba(224,122,95,0.04);
+}
+
+.comparison-col h4 {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  margin-bottom: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.comparison-col.ours h4 { color: var(--teal); }
+.comparison-col.gpt h4 { color: var(--accent); }
+
+.comparison-col ul {
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.comparison-col li {
+  padding: 0.3rem 0;
+  padding-left: 1.2rem;
+  position: relative;
+}
+
+.comparison-col li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.65rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.comparison-col.ours li::before { background: var(--teal); }
+.comparison-col.gpt li::before { background: var(--accent); }
+
+.match-line {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.match-line:last-child { border-bottom: none; }
+
+.match-check { color: #2a9d8f; font-weight: 700; }
+.match-x { color: var(--accent); font-weight: 700; }
+
+/* ============================================================
+   RESULTS TABLE
+   ============================================================ */
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  margin: 1rem 0;
+}
+
+.results-table th {
+  text-align: left;
+  padding: 0.5rem 0.8rem;
+  border-bottom: 2px solid var(--text);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.results-table td {
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.results-table tr.best td { background: rgba(224,122,95,0.08); font-weight: 600; }
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+footer {
+  padding: 3rem 0;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--text-light);
+  text-align: center;
+}
+
+footer a { color: var(--teal); }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 640px) {
+  html { font-size: 16px; }
+  header h1 { font-size: 1.8rem; }
+  .comparison-grid { grid-template-columns: 1fr; }
+  .prediction-bars-wrap { flex-direction: column; }
+  .embed-viz { flex-direction: column; }
+  .split-eq { grid-template-columns: 1fr; gap: 0.3rem; }
+  .split-op { font-size: 1rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+<header>
+  <h1>Why Does Attention Work?</h1>
+  <p class="subtitle">Multi-head attention falls out of pure algebra.<br>
+    No neural networks assumed. Just "what does good prediction mean?"</p>
+</header>
+
+<!-- ============================================================
+     SECTION 1: WHAT IS PREDICTION?
+     ============================================================ -->
+<section id="sec-prediction">
+  <h2>1. What is prediction?</h2>
+  <p>
+    Imagine you are predicting the next letter in a name. You have seen some letters
+    already, and you need to guess what comes next. A good predictor assigns
+    <span class="highlight">high probability to the right letter</span> and low
+    probability to wrong ones.
+  </p>
+  <p>
+    We measure this with <em>surprise</em>: if you assign probability <em>p</em>
+    to the correct letter, your surprise is &minus;log(<em>p</em>). Lower surprise = better
+    prediction. This is the <strong>only</strong> thing we assume.
+  </p>
+
+  <div class="interactive">
+    <div class="interactive-label">Try it -- pick a name, then step through it</div>
+    <div class="name-btn-row" id="nameButtons"></div>
+    <div class="typed-name" id="typedName"></div>
+    <div class="playback-controls">
+      <button id="btnPrev" title="Previous letter">&larr;</button>
+      <input type="range" id="posSlider" min="0" max="1" value="0" step="1">
+      <button id="btnNext" title="Next letter">&rarr;</button>
+    </div>
+    <svg id="predBars" class="bar-chart" width="100%" height="320"></svg>
+    <div class="surprise-display" id="surpriseDisplay"></div>
+  </div>
+
+  <p>
+    The total surprise across a whole dataset of 32,000 names is called
+    <strong>negative log-likelihood (NLL)</strong>. A random guess gives NLL = 3.30.
+    A count-based model that just memorizes letter-pair frequencies gets NLL = 2.45.
+    The question is: can we do better, and <em>what does the math force us to build?</em>
+  </p>
+</section>
+
+<!-- ============================================================
+     SECTION 2: THE SUMMARY MUST COMBINE
+     ============================================================ -->
+<section id="sec-monoid">
+  <h2>2. The summary must combine</h2>
+  <p>
+    Here is a crucial observation. Any predictor that reads text left-to-right
+    must keep a <strong>summary</strong> of what it has seen so far. After reading
+    "alex", it carries some internal state, and uses that state to predict the next
+    letter.
+  </p>
+  <p>
+    But the math proves something stronger. If you split a word anywhere &mdash;
+    say "alex" + "ander" &mdash; then the summary of the whole word must equal
+    the <span class="highlight">combination</span> of the two partial summaries.
+    In math: <code>summary(AB) = summary(A) + summary(B)</code>.
+  </p>
+  <p>
+    This property is called a <strong>monoid homomorphism</strong>.
+    It is not a design choice. It is a <em>consequence of what "good prediction" means</em>.
+  </p>
+
+  <div class="interactive">
+    <div class="interactive-label">Click on the word to move the split point</div>
+    <div class="split-display">
+      <div class="split-word" id="splitWord"></div>
+      <div class="split-hint">Click a letter to split there</div>
+    </div>
+    <div class="split-eq" id="splitEq"></div>
+  </div>
+
+  <div class="aside">
+    <strong>Why?</strong> Because the total surprise of a text is the <em>sum</em> of
+    surprises at each position. Sums can be regrouped: the surprise from "alex" plus
+    the surprise from "ander" equals the surprise from "alexander". Any internal state
+    must respect this regrouping &mdash; that is the monoid constraint.
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 3: WHAT'S IN THE SUMMARY?
+     ============================================================ -->
+<section id="sec-state">
+  <h2>3. What goes in the summary?</h2>
+  <p>
+    So the predictor must keep a combinable summary. But of <em>what</em>?
+    The simplest useful answer: for each pair of consecutive letters,
+    remember a compressed version of how often they appeared together.
+  </p>
+  <p>
+    Each letter gets a position in a small <em>embedding space</em> (think: a map
+    where similar letters are near each other). When we see letter B follow
+    letter A, we record their relationship as a little grid: A's position times
+    B's position. This is the <strong>outer product</strong>.
+  </p>
+  <p>
+    As we read more letters, these grids <em>add up</em> into a matrix. This matrix
+    is the summary. It captures all the pair correlations we have seen, compressed
+    into a small space.
+  </p>
+  <p>
+    This structure is called <strong>T<sub>2</sub></strong> &mdash; the truncated
+    tensor algebra at order 2. It is the simplest algebraic object that (a) is a
+    monoid and (b) captures pairwise statistics in embedding space.
+  </p>
+
+  <div class="interactive">
+    <div class="interactive-label">Watch the summary build up as letters are processed</div>
+    <div class="section3-controls">
+      <span style="font-family: var(--font-sans); font-size: 0.82rem;">Name:</span>
+      <button class="s3-name active" data-name="emma">emma</button>
+      <button class="s3-name" data-name="alexander">alexander</button>
+      <button class="s3-name" data-name="sophia">sophia</button>
+      <button class="s3-name" data-name="michael">michael</button>
+      <span style="flex:1;"></span>
+      <button id="s3StepBtn">Step &rarr;</button>
+      <button id="s3ResetBtn">Reset</button>
+    </div>
+    <div class="embed-viz">
+      <div>
+        <div style="font-family: var(--font-sans); font-size: 0.78rem; color: var(--text-light); margin-bottom: 0.3rem;">
+          Embedding space (2D slice)
+        </div>
+        <svg id="embedScatter" class="embed-scatter" width="280" height="280"></svg>
+      </div>
+      <div>
+        <div style="font-family: var(--font-sans); font-size: 0.78rem; color: var(--text-light); margin-bottom: 0.3rem;">
+          Accumulated matrix (the "summary")
+        </div>
+        <div class="heatmap-wrap">
+          <canvas id="heatmapCanvas" width="240" height="240"></canvas>
+          <div class="heatmap-label" id="heatmapLabel">No letters processed yet</div>
+        </div>
+      </div>
+    </div>
+    <div style="font-family: var(--font-sans); font-size: 0.82rem; margin-top: 0.8rem; color: var(--text-light);" id="s3Status">
+      Click "Step" to process the first letter.
+    </div>
+    <div style="font-family: var(--font-sans); font-size: 0.78rem; margin-top: 0.5rem; color: var(--text-light);">
+      <em>Left:</em> Each letter is a colored dot. Arrows show letter pairs as they are processed.
+      <em>Right:</em> The 8 x 8 matrix accumulates outer products of embeddings.
+      Teal = positive, orange = negative. The matrix IS the summary.
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 4: ATTENTION HEADS
+     ============================================================ -->
+<section id="sec-heads">
+  <h2>4. Attention heads = ways of reading the summary</h2>
+  <p>
+    We have a matrix of accumulated letter-pair statistics. To predict the next
+    letter, we need to <em>read</em> this matrix &mdash; extract the relevant
+    information from it.
+  </p>
+  <p>
+    The math says: <span class="highlight">any way of reading a matrix can be
+    decomposed into a sum of independent "queries"</span>. Each query looks at
+    the matrix from one angle. This is the
+    <strong>rank decomposition</strong> of a linear functional.
+  </p>
+  <p>
+    Each query is an <strong>attention head</strong>. More heads = more angles to
+    read from = more information extracted. But each head costs parameters, so there
+    is a budget tradeoff.
+  </p>
+
+  <div class="interactive">
+    <div class="interactive-label">Slide to add more attention heads</div>
+
+    <div class="heads-slider-wrap">
+      <span>Heads:</span>
+      <input type="range" id="headsSlider" min="0" max="5" value="0" step="1">
+      <span class="heads-val" id="headsVal">0</span>
+    </div>
+
+    <div class="heads-visual" id="headsVisual"></div>
+
+    <div class="nll-chart-wrap">
+      <svg id="nllChart" viewBox="0 0 680 280"></svg>
+    </div>
+  </div>
+
+  <div class="aside">
+    <strong>This is the key result.</strong> We did not assume attention heads exist.
+    We asked "how do you read a matrix?" and the algebra forced the answer: via a
+    sum of rank-1 queries. Each rank-1 query IS an attention head. The number of
+    heads is the only free parameter.
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 5: THE PUNCHLINE
+     ============================================================ -->
+<section id="sec-punchline">
+  <h2>5. The punchline</h2>
+  <p>
+    We started with one question: <em>what does "good prediction" mean?</em>
+    From the answer (minimize surprise), the algebra forced a chain of conclusions:
+  </p>
+  <p style="padding-left: 1em; border-left: 3px solid var(--accent); margin: 1.5rem 0;">
+    Minimize surprise &rarr; summaries must combine (monoid) &rarr;
+    store pair statistics as a matrix (tensor algebra) &rarr;
+    read the matrix via independent queries (attention heads).
+  </p>
+  <p>
+    Multi-head attention &mdash; the core mechanism of GPT, Claude, and every
+    modern language model &mdash; <span class="highlight">falls out of pure algebra</span>.
+  </p>
+
+  <div class="comparison-grid">
+    <div class="comparison-col ours">
+      <h4>What we derived</h4>
+      <ul>
+        <li>State = matrix of embedded pair statistics</li>
+        <li>State updates by addition (monoid)</li>
+        <li>Readout = sum of rank-1 queries</li>
+        <li>Each rank-1 query = one attention head</li>
+        <li>More heads = more information</li>
+      </ul>
+    </div>
+    <div class="comparison-col gpt">
+      <h4>What GPT actually uses</h4>
+      <ul>
+        <li>Key-value cache (accumulated state)</li>
+        <li>Additive state accumulation</li>
+        <li>Multi-head query-key-value attention</li>
+        <li>Each head = query-key inner product</li>
+        <li>More heads used in practice</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>What matches &mdash; and what does not</h3>
+
+  <div style="margin: 1rem 0;">
+    <div class="match-line"><span class="match-check">YES</span> State accumulates additively (monoid)</div>
+    <div class="match-line"><span class="match-check">YES</span> Readout uses query-key-value structure</div>
+    <div class="match-line"><span class="match-check">YES</span> Multiple independent heads improve performance</div>
+    <div class="match-line"><span class="match-check">YES</span> Diminishing returns as heads increase</div>
+    <div class="match-line"><span class="match-x">NO</span> Softmax normalization (breaks the monoid)</div>
+    <div class="match-line"><span class="match-x">NO</span> Positional encoding (the monoid is position-agnostic)</div>
+  </div>
+
+  <p>
+    The algebra derives <strong>linear attention</strong> (Katharopoulos et al., 2020)
+    exactly. Standard softmax attention breaks the monoid structure &mdash; that is
+    both the source of its extra power and its extra cost. The algebra tells us
+    <em>what is gained and what is lost</em> at each step.
+  </p>
+
+  <div class="aside">
+    <strong>The analogy to AD.</strong> Conal Elliott showed that forward-mode and
+    reverse-mode automatic differentiation are just two representations of the same
+    linear map (the derivative). Here, we show that attention heads are just the
+    rank decomposition of a linear readout. Both are representation theorems with
+    a numerical parameter: in AD it is dimension (forward vs reverse); here it is
+    rank (number of heads).
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 6: REAL RESULTS
+     ============================================================ -->
+<section id="sec-results">
+  <h2>6. Does it actually work?</h2>
+  <p>
+    We tested the algebraic hierarchy on 32,000 real names. These are actual
+    experimental results, not theoretical predictions:
+  </p>
+
+  <table class="results-table">
+    <thead>
+      <tr>
+        <th>Model</th>
+        <th>Params</th>
+        <th>NLL</th>
+        <th>What it is</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Random guess</td>
+        <td>&mdash;</td>
+        <td>3.296</td>
+        <td>Uniform over 27 characters</td>
+      </tr>
+      <tr>
+        <td>Count bigram</td>
+        <td>&mdash;</td>
+        <td>2.454</td>
+        <td>Memorize pair frequencies</td>
+      </tr>
+      <tr>
+        <td>1 head (H=1)</td>
+        <td>2,038</td>
+        <td>2.269</td>
+        <td>Single query readout</td>
+      </tr>
+      <tr>
+        <td>2 heads (H=2)</td>
+        <td>2,726</td>
+        <td>2.268</td>
+        <td>Two independent queries</td>
+      </tr>
+      <tr>
+        <td>4 heads (H=4)</td>
+        <td>4,102</td>
+        <td>2.258</td>
+        <td>Four independent queries</td>
+      </tr>
+      <tr>
+        <td>8 heads (H=8)</td>
+        <td>6,854</td>
+        <td>2.252</td>
+        <td>Eight independent queries</td>
+      </tr>
+      <tr class="best">
+        <td>4 heads + ELU</td>
+        <td>4,102</td>
+        <td>2.250</td>
+        <td>Positive feature map (bridges to softmax)</td>
+      </tr>
+      <tr>
+        <td>T2 flat (D=16)</td>
+        <td>8,262</td>
+        <td>2.256</td>
+        <td>Full-rank readout (no decomposition)</td>
+      </tr>
+      <tr>
+        <td>Karpathy MLP</td>
+        <td>~10,000</td>
+        <td>~2.3</td>
+        <td>Standard neural network baseline</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    The algebra-derived model (4 heads + positive feature map) achieves
+    <strong>NLL = 2.250</strong> with 4,102 parameters &mdash; beating the
+    standard MLP baseline with half the parameters. Each additional head
+    improves performance with diminishing returns, exactly as the rank
+    decomposition theory predicts.
+  </p>
+</section>
+
+<!-- ============================================================
+     FOOTER
+     ============================================================ -->
+<footer>
+  <p>
+    Based on the <a href="https://github.com/stevekrouse/denotational-llm">Denotational LLM</a>
+    project, following Conal Elliott's methodology from
+    <a href="http://conal.net/papers/essence-of-ad/"><em>The Simple Essence of Automatic Differentiation</em></a>.
+    <br>
+    Formalized in Agda. Benchmarked on Karpathy's
+    <a href="https://github.com/karpathy/makemore">makemore</a> dataset.
+  </p>
+</footer>
+
+</div><!-- /.container -->
+
+
+<!-- ============================================================
+     JAVASCRIPT
+     ============================================================ -->
+<script>
+(function() {
+  'use strict';
+
+  // ============================================================
+  // SHARED DATA: Hardcoded "realistic" bigram probabilities
+  // Based on English name letter-pair frequencies.
+  // Row = previous char, Col = next char.
+  // Characters: . a b c d e f g h i j k l m n o p q r s t u v w x y z
+  // Index 0 = '.', 1-26 = a-z
+  // ============================================================
+
+  const VOCAB = 27;
+  const CHARS = '.abcdefghijklmnopqrstuvwxyz';
+
+  // Simplified bigram probabilities (smoothed, inspired by real name data).
+  // Each row sums to 1. Row i = distribution of next char given prev char i.
+  // This is a SMALL representative table; in reality these come from 32k names.
+  function makeBigramProbs() {
+    const raw = new Float64Array(VOCAB * VOCAB);
+    // Base: slightly above zero everywhere for smoothing
+    for (let i = 0; i < VOCAB * VOCAB; i++) raw[i] = 0.01;
+
+    // . (start of name) -> mostly vowels and common consonants
+    setRow(raw, 0, {a:12, b:3, c:4, d:3, e:5, f:1, g:2, h:3, i:3, j:4, k:3, l:4, m:6, n:3, o:2, p:2, r:3, s:5, t:3, v:1, w:1, z:1});
+    // a -> common followers
+    setRow(raw, ci('a'), {n:12, l:8, r:8, d:5, s:5, t:4, m:4, i:3, '.':4, b:2, c:2, e:2, h:2, k:2, v:2, x:1, y:2, z:1});
+    // b -> vowels, r, l
+    setRow(raw, ci('b'), {a:5, e:5, i:3, o:3, r:3, l:2, u:2, y:1});
+    // c -> a, e, h, i, k, o
+    setRow(raw, ci('c'), {a:4, e:4, h:5, i:3, k:3, o:3, l:2, u:1, y:1});
+    // d -> vowels, r, '.', i
+    setRow(raw, ci('d'), {a:4, e:5, i:4, o:3, r:3, '.':3, d:1, y:2, u:1});
+    // e -> n, l, r, s, '.', a, d, e, i, t
+    setRow(raw, ci('e'), {n:8, l:6, r:6, s:5, '.':5, a:4, d:4, e:3, i:3, t:3, y:3, m:2, v:2, x:1});
+    // f -> a, e, i, o, r
+    setRow(raw, ci('f'), {a:4, e:3, i:3, o:3, r:3, f:1});
+    // g -> a, e, h, i, o, r
+    setRow(raw, ci('g'), {a:4, e:4, h:2, i:3, o:3, r:2, u:1});
+    // h -> a, e, i, o, u
+    setRow(raw, ci('h'), {a:6, e:5, i:4, o:4, u:2, '.':1});
+    // i -> n, a, c, d, e, l, o, r, s, t
+    setRow(raw, ci('i'), {n:8, a:6, c:3, d:3, e:5, l:5, o:3, r:3, s:4, t:3, '.':2, z:1, k:1});
+    // j -> a, e, o, u
+    setRow(raw, ci('j'), {a:5, e:3, o:4, u:2});
+    // k -> a, e, i, y, '.', h
+    setRow(raw, ci('k'), {a:4, e:4, i:4, y:3, '.':2, h:2, l:1, o:1});
+    // l -> a, e, i, l, o, u, y, '.'
+    setRow(raw, ci('l'), {a:5, e:6, i:6, l:3, o:4, u:2, y:3, '.':2, d:1});
+    // m -> a, e, i, o, m
+    setRow(raw, ci('m'), {a:5, e:5, i:4, o:4, m:2, y:1, '.':1, u:1});
+    // n -> a, d, e, i, n, o, '.', g, t
+    setRow(raw, ci('n'), {a:5, d:3, e:5, i:5, n:3, o:3, '.':4, g:2, t:2, s:1, y:1});
+    // o -> n, l, r, s, '.', m
+    setRow(raw, ci('o'), {n:7, l:4, r:5, s:3, '.':2, m:2, d:2, p:1, u:2, t:1, b:1});
+    // p -> a, e, h, i, o, r
+    setRow(raw, ci('p'), {a:3, e:3, h:3, i:2, o:2, r:2, p:1});
+    // q -> u
+    setRow(raw, ci('q'), {u:10});
+    // r -> a, e, i, o, y, '.'
+    setRow(raw, ci('r'), {a:5, e:5, i:5, o:4, y:3, '.':2, d:1, r:1, u:1, n:1});
+    // s -> a, e, h, i, o, t, '.', s
+    setRow(raw, ci('s'), {a:4, e:4, h:4, i:3, o:3, t:4, '.':3, s:2, u:1, y:1});
+    // t -> a, e, h, i, o, r, t, '.'
+    setRow(raw, ci('t'), {a:4, e:4, h:4, i:3, o:4, r:2, t:1, '.':2, y:1});
+    // u -> l, n, r, s, '.', a, e
+    setRow(raw, ci('u'), {l:4, n:4, r:4, s:3, '.':1, a:2, e:2, d:1, t:1});
+    // v -> a, e, i
+    setRow(raw, ci('v'), {a:4, e:4, i:5, o:1});
+    // w -> a, e, i
+    setRow(raw, ci('w'), {a:4, e:3, i:3, n:1, o:1});
+    // x -> a, i, '.', e
+    setRow(raw, ci('x'), {a:3, i:3, '.':3, e:2, o:1});
+    // y -> a, e, l, n, '.', s
+    setRow(raw, ci('y'), {a:4, e:3, l:3, n:3, '.':5, s:2, d:1, i:1});
+    // z -> a, e, i, z, '.'
+    setRow(raw, ci('z'), {a:4, e:4, i:3, z:1, '.':2, o:1});
+
+    // Normalize each row
+    for (let r = 0; r < VOCAB; r++) {
+      let sum = 0;
+      for (let c = 0; c < VOCAB; c++) sum += raw[r * VOCAB + c];
+      for (let c = 0; c < VOCAB; c++) raw[r * VOCAB + c] /= sum;
+    }
+    return raw;
+  }
+
+  function ci(ch) { return ch === '.' ? 0 : ch.charCodeAt(0) - 96; }
+  function ic(idx) { return idx === 0 ? '.' : String.fromCharCode(idx + 96); }
+
+  function setRow(arr, row, vals) {
+    for (const [ch, v] of Object.entries(vals)) {
+      arr[row * VOCAB + ci(ch)] = v;
+    }
+  }
+
+  const BIGRAM = makeBigramProbs();
+
+  // ============================================================
+  // SECTION 1: PREDICTION VISUALIZATION
+  // ============================================================
+
+  const NAMES = ['emma', 'alexander', 'sophia', 'michael', 'olivia', 'james', 'isabella', 'william'];
+
+  let currentName = 'emma';
+  let currentPos = 0;
+
+  function initSection1() {
+    const btnRow = document.getElementById('nameButtons');
+    NAMES.forEach(name => {
+      const btn = document.createElement('button');
+      btn.textContent = name;
+      if (name === currentName) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        currentName = name;
+        currentPos = 0;
+        document.querySelectorAll('#nameButtons button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        updateSection1();
+      });
+      btnRow.appendChild(btn);
+    });
+
+    const slider = document.getElementById('posSlider');
+    slider.addEventListener('input', () => {
+      currentPos = parseInt(slider.value);
+      renderSection1();
+    });
+
+    document.getElementById('btnPrev').addEventListener('click', () => {
+      if (currentPos > 0) { currentPos--; updateSection1Slider(); renderSection1(); }
+    });
+    document.getElementById('btnNext').addEventListener('click', () => {
+      if (currentPos < currentName.length) { currentPos++; updateSection1Slider(); renderSection1(); }
+    });
+
+    updateSection1();
+  }
+
+  function updateSection1() {
+    const slider = document.getElementById('posSlider');
+    slider.max = currentName.length;
+    slider.value = currentPos;
+    renderSection1();
+  }
+
+  function updateSection1Slider() {
+    document.getElementById('posSlider').value = currentPos;
+  }
+
+  function renderSection1() {
+    // Show the typed name with cursor
+    const typed = document.getElementById('typedName');
+    const fullSeq = '.' + currentName + '.';
+    const past = fullSeq.substring(1, currentPos + 1); // chars typed so far
+    const nextChar = currentPos < currentName.length ? currentName[currentPos] : '.';
+
+    typed.innerHTML = '<span class="past">' + escHtml(past) + '</span>' +
+                      '<span class="cursor"></span>' +
+                      '<span class="next-char">' + (nextChar === '.' ? '' : escHtml(nextChar)) + '</span>';
+
+    // Get the probability distribution for the current position
+    const prevIdx = currentPos === 0 ? 0 : ci(currentName[currentPos - 1]);
+    const probs = [];
+    for (let c = 0; c < VOCAB; c++) {
+      probs.push({ idx: c, ch: ic(c), prob: BIGRAM[prevIdx * VOCAB + c] });
+    }
+
+    // Sort by probability descending for display
+    probs.sort((a, b) => b.prob - a.prob);
+
+    // Compute surprise for the actual next character
+    const actualNext = currentPos < currentName.length ? ci(currentName[currentPos]) : 0;
+    const actualProb = BIGRAM[prevIdx * VOCAB + actualNext];
+    const surprise = -Math.log(actualProb);
+
+    // Render bar chart (top 12 characters)
+    const svg = document.getElementById('predBars');
+    const topN = 12;
+    const display = probs.slice(0, topN);
+    const barH = 20;
+    const gap = 4;
+    const labelW = 30;
+    const maxBarW = 400;
+    const svgH = topN * (barH + gap) + 20;
+    svg.setAttribute('height', svgH);
+
+    let html = '';
+    display.forEach((d, i) => {
+      const y = i * (barH + gap) + 10;
+      const w = d.prob * maxBarW;
+      const isActual = d.idx === actualNext;
+      const fill = isActual ? 'var(--accent)' : 'var(--teal)';
+      const opacity = isActual ? 1 : 0.5;
+      const label = d.ch === '.' ? 'END' : d.ch;
+      html += `<text x="${labelW - 6}" y="${y + barH / 2 + 4}" text-anchor="end"
+                font-size="12" font-family="var(--font-mono)" fill="var(--text)"
+                font-weight="${isActual ? '700' : '400'}">${label}</text>`;
+      html += `<rect x="${labelW}" y="${y}" width="${Math.max(2, w)}" height="${barH}"
+                rx="3" fill="${fill}" opacity="${opacity}" />`;
+      html += `<text x="${labelW + Math.max(2, w) + 6}" y="${y + barH / 2 + 4}"
+                font-size="11" fill="var(--text-light)">${(d.prob * 100).toFixed(1)}%</text>`;
+    });
+    svg.innerHTML = html;
+
+    // Surprise display
+    const sd = document.getElementById('surpriseDisplay');
+    const prevLabel = currentPos === 0 ? 'start' : '"' + currentName[currentPos - 1] + '"';
+    const nextLabel = actualNext === 0 ? 'end' : '"' + ic(actualNext) + '"';
+    sd.innerHTML = `After ${prevLabel}, the model gives ${nextLabel} probability
+      ${(actualProb * 100).toFixed(1)}% &mdash; surprise = <span class="val">${surprise.toFixed(2)}</span>`;
+  }
+
+
+  // ============================================================
+  // SECTION 2: MONOID SPLIT
+  // ============================================================
+
+  const SPLIT_WORD = 'alexander';
+  let splitPos = 4; // between 'x' and 'a'
+
+  // Fake "summary values" that add up correctly
+  function computeSummary(str) {
+    let val = 0;
+    for (let i = 0; i < str.length; i++) {
+      val += (str.charCodeAt(i) - 96) * 0.37 + i * 0.13;
+    }
+    return val;
+  }
+
+  function initSection2() {
+    renderSection2();
+    document.getElementById('splitWord').addEventListener('click', (e) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const charW = rect.width / SPLIT_WORD.length;
+      const pos = Math.max(1, Math.min(SPLIT_WORD.length - 1, Math.round(x / charW)));
+      splitPos = pos;
+      renderSection2();
+    });
+  }
+
+  function renderSection2() {
+    const word = SPLIT_WORD;
+    const left = word.substring(0, splitPos);
+    const right = word.substring(splitPos);
+
+    // Render the split word
+    const sw = document.getElementById('splitWord');
+    sw.innerHTML = '<span class="left-part">' + escHtml(left) + '</span>' +
+                   '<span class="split-bar"></span>' +
+                   '<span class="right-part">' + escHtml(right) + '</span>';
+
+    // Compute "summaries" (using NLL-like values for realism)
+    const fullNLL = computeNLLForString(word);
+    const leftNLL = computeNLLForString(left);
+    const rightNLL = computeNLLForString(right, left[left.length - 1] || '.');
+
+    // Render the equation
+    const eq = document.getElementById('splitEq');
+    eq.innerHTML = `
+      <div class="split-box full">
+        <div style="font-family: var(--font-mono); font-size: 0.9rem;">"${escHtml(word)}"</div>
+        <div style="font-size: 0.78rem; color: var(--text-light); margin-top: 0.2rem;">
+          surprise = ${fullNLL.toFixed(2)}
+        </div>
+      </div>
+      <div class="split-op">=</div>
+      <div class="split-box left">
+        <div style="font-family: var(--font-mono); font-size: 0.9rem; color: var(--teal);">"${escHtml(left)}"</div>
+        <div style="font-size: 0.78rem; color: var(--text-light); margin-top: 0.2rem;">
+          surprise = ${leftNLL.toFixed(2)}
+        </div>
+      </div>
+      <div class="split-op">+</div>
+      <div class="split-box right">
+        <div style="font-family: var(--font-mono); font-size: 0.9rem; color: var(--accent);">"${escHtml(right)}"</div>
+        <div style="font-size: 0.78rem; color: var(--text-light); margin-top: 0.2rem;">
+          surprise = ${(fullNLL - leftNLL).toFixed(2)}
+        </div>
+      </div>
+    `;
+  }
+
+  function computeNLLForString(str, firstPrev) {
+    let nll = 0;
+    for (let i = 0; i < str.length; i++) {
+      const prev = i === 0 ? (firstPrev ? ci(firstPrev) : 0) : ci(str[i - 1]);
+      const cur = ci(str[i]);
+      nll += -Math.log(BIGRAM[prev * VOCAB + cur] + 1e-10);
+    }
+    return nll;
+  }
+
+
+  // ============================================================
+  // SECTION 3: EMBEDDINGS & OUTER PRODUCT
+  // ============================================================
+
+  // Fixed 2D embeddings for visualization (positioned nicely in a circle-ish layout)
+  const EMBED_2D = {};
+  const letters = 'abcdefghijklmnopqrstuvwxyz.';
+  const rng = mulberry32(42);
+
+  // Place vowels and common consonants in recognizable clusters
+  const vowels = 'aeiou';
+  const consonants = 'bcdfghjklmnpqrstvwxyz';
+  letters.split('').forEach((ch, i) => {
+    if (ch === '.') {
+      EMBED_2D[ch] = [0, 0];
+    } else if (vowels.includes(ch)) {
+      const angle = (vowels.indexOf(ch) / vowels.length) * Math.PI * 0.8 + Math.PI * 0.1;
+      const r = 0.5 + rng() * 0.3;
+      EMBED_2D[ch] = [Math.cos(angle) * r, Math.sin(angle) * r];
+    } else {
+      const angle = (consonants.indexOf(ch) / consonants.length) * Math.PI * 1.2 + Math.PI * 0.9;
+      const r = 0.4 + rng() * 0.4;
+      EMBED_2D[ch] = [Math.cos(angle) * r, Math.sin(angle) * r];
+    }
+  });
+
+  let s3Name = 'emma';
+  let s3Step = 0;
+  let s3Matrix = null; // D x D accumulated outer product
+
+  const S3_D = 8; // Use 8 dimensions for the heatmap (small enough to visualize)
+
+  // Generate consistent D-dimensional embeddings from the 2D ones
+  const EMBED_ND = {};
+  letters.split('').forEach(ch => {
+    const e = new Float64Array(S3_D);
+    // Use 2D embedding plus some hash-derived dimensions
+    const seed = mulberry32(ch.charCodeAt(0) * 137);
+    e[0] = EMBED_2D[ch][0];
+    e[1] = EMBED_2D[ch][1];
+    for (let d = 2; d < S3_D; d++) {
+      e[d] = (seed() - 0.5) * 0.8;
+    }
+    EMBED_ND[ch] = e;
+  });
+
+  function initSection3() {
+    s3Matrix = new Float64Array(S3_D * S3_D);
+    renderEmbedScatter();
+    renderHeatmap();
+
+    document.querySelectorAll('.s3-name').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.s3-name').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        s3Name = btn.dataset.name;
+        s3Step = 0;
+        s3Matrix = new Float64Array(S3_D * S3_D);
+        renderEmbedScatter();
+        renderHeatmap();
+        document.getElementById('s3Status').textContent = 'Click "Step" to process the first letter.';
+      });
+    });
+
+    document.getElementById('s3StepBtn').addEventListener('click', () => {
+      const fullSeq = '.' + s3Name + '.';
+      if (s3Step < fullSeq.length - 1) {
+        processStep3();
+        s3Step++;
+        renderEmbedScatter();
+        renderHeatmap();
+        if (s3Step >= fullSeq.length - 1) {
+          document.getElementById('s3Status').textContent =
+            `Done! All ${s3Step} letter pairs processed. The matrix is the complete summary of "${s3Name}".`;
+        }
+      }
+    });
+
+    document.getElementById('s3ResetBtn').addEventListener('click', () => {
+      s3Step = 0;
+      s3Matrix = new Float64Array(S3_D * S3_D);
+      renderEmbedScatter();
+      renderHeatmap();
+      document.getElementById('s3Status').textContent = 'Click "Step" to process the first letter.';
+    });
+  }
+
+  function processStep3() {
+    const fullSeq = '.' + s3Name + '.';
+    if (s3Step >= fullSeq.length - 1) return;
+
+    const prevCh = fullSeq[s3Step];
+    const curCh = fullSeq[s3Step + 1];
+    const ePrev = EMBED_ND[prevCh];
+    const eCur = EMBED_ND[curCh];
+
+    // Add outer product: M += ePrev (x) eCur
+    for (let i = 0; i < S3_D; i++) {
+      for (let j = 0; j < S3_D; j++) {
+        s3Matrix[i * S3_D + j] += ePrev[i] * eCur[j];
+      }
+    }
+
+    const status = document.getElementById('s3Status');
+    const prevLabel = prevCh === '.' ? 'start' : '"' + prevCh + '"';
+    const curLabel = curCh === '.' ? 'end' : '"' + curCh + '"';
+    status.textContent = `Step ${s3Step + 1}: ${prevLabel} followed by ${curLabel} — outer product added to matrix.`;
+  }
+
+  function renderEmbedScatter() {
+    const svg = document.getElementById('embedScatter');
+    const W = 280, H = 280;
+    const pad = 30;
+
+    let html = '';
+
+    // Draw axes
+    html += `<line x1="${pad}" y1="${H/2}" x2="${W-pad}" y2="${H/2}" stroke="#ddd" stroke-width="1"/>`;
+    html += `<line x1="${W/2}" y1="${pad}" x2="${W/2}" y2="${H-pad}" stroke="#ddd" stroke-width="1"/>`;
+
+    // Map embedding coords to SVG coords
+    function toSVG(e) {
+      return [
+        pad + (e[0] + 1) / 2 * (W - 2 * pad),
+        H - pad - (e[1] + 1) / 2 * (H - 2 * pad)
+      ];
+    }
+
+    // Draw arrows for processed pairs
+    const fullSeq = '.' + s3Name + '.';
+    for (let i = 0; i < Math.min(s3Step, fullSeq.length - 1); i++) {
+      const prevCh = fullSeq[i];
+      const curCh = fullSeq[i + 1];
+      const [x1, y1] = toSVG(EMBED_2D[prevCh]);
+      const [x2, y2] = toSVG(EMBED_2D[curCh]);
+      const opacity = 0.15 + 0.6 * (i / Math.max(1, s3Step));
+      html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+                stroke="var(--accent)" stroke-width="1.5" opacity="${opacity.toFixed(2)}"
+                marker-end="url(#arrow)"/>`;
+    }
+
+    // Arrow marker
+    html = `<defs><marker id="arrow" markerWidth="6" markerHeight="4" refX="5" refY="2" orient="auto">
+      <path d="M0,0 L6,2 L0,4" fill="var(--accent)" opacity="0.6"/>
+    </marker></defs>` + html;
+
+    // Draw letter dots
+    letters.split('').forEach(ch => {
+      if (ch === '.') return;
+      const [x, y] = toSVG(EMBED_2D[ch]);
+      const inName = s3Name.includes(ch) || ch === '.';
+      const opacity = inName ? 1 : 0.25;
+      const r = inName ? 5 : 3;
+      const fill = vowels.includes(ch) ? 'var(--accent)' : 'var(--teal)';
+      html += `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" opacity="${opacity}"/>`;
+      html += `<text x="${x}" y="${y - 8}" text-anchor="middle" font-size="10"
+                font-family="var(--font-mono)" fill="var(--text)" opacity="${opacity}">${ch}</text>`;
+    });
+
+    // Start dot
+    const [sx, sy] = toSVG(EMBED_2D['.']);
+    html += `<circle cx="${sx}" cy="${sy}" r="4" fill="var(--text)" opacity="0.4"/>`;
+    html += `<text x="${sx}" y="${sy - 8}" text-anchor="middle" font-size="9"
+              font-family="var(--font-sans)" fill="var(--text-light)">start</text>`;
+
+    svg.innerHTML = html;
+  }
+
+  function renderHeatmap() {
+    const canvas = document.getElementById('heatmapCanvas');
+    const ctx = canvas.getContext('2d');
+    const W = 240, H = 240;
+    const cellW = W / S3_D;
+    const cellH = H / S3_D;
+
+    // Find max absolute value for color scaling
+    let maxAbs = 0;
+    for (let i = 0; i < S3_D * S3_D; i++) {
+      maxAbs = Math.max(maxAbs, Math.abs(s3Matrix[i]));
+    }
+    if (maxAbs < 0.001) maxAbs = 1;
+
+    // Draw cells
+    for (let i = 0; i < S3_D; i++) {
+      for (let j = 0; j < S3_D; j++) {
+        const val = s3Matrix[i * S3_D + j] / maxAbs;
+        if (val >= 0) {
+          // Positive: white to teal
+          const t = Math.min(1, val);
+          const r = Math.round(255 - t * (255 - 61));
+          const g = Math.round(255 - t * (255 - 90));
+          const b = Math.round(255 - t * (255 - 128));
+          ctx.fillStyle = `rgb(${r},${g},${b})`;
+        } else {
+          // Negative: white to accent
+          const t = Math.min(1, -val);
+          const r = Math.round(255 - t * (255 - 224));
+          const g = Math.round(255 - t * (255 - 122));
+          const b = Math.round(255 - t * (255 - 95));
+          ctx.fillStyle = `rgb(${r},${g},${b})`;
+        }
+        ctx.fillRect(j * cellW, i * cellH, cellW - 1, cellH - 1);
+      }
+    }
+
+    // Draw grid lines for clarity
+    ctx.strokeStyle = '#e0e0e0';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i <= S3_D; i++) {
+      ctx.beginPath();
+      ctx.moveTo(i * cellW, 0); ctx.lineTo(i * cellW, H);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, i * cellH); ctx.lineTo(W, i * cellH);
+      ctx.stroke();
+    }
+
+    const label = document.getElementById('heatmapLabel');
+    if (s3Step === 0) {
+      label.textContent = 'No letters processed yet';
+    } else {
+      const fullSeq = '.' + s3Name + '.';
+      const processed = fullSeq.substring(0, s3Step + 1);
+      label.textContent = `After "${processed.replace('.', '')}" (${s3Step} pair${s3Step > 1 ? 's' : ''})`;
+    }
+  }
+
+
+  // ============================================================
+  // SECTION 4: ATTENTION HEADS
+  // ============================================================
+
+  // Actual experimental data from the project
+  const HEAD_DATA = [
+    { h: 0, label: 'Bigram',      params: 0,     nll: 2.454, note: 'Count-based, no parameters' },
+    { h: 1, label: 'H=1',         params: 2038,  nll: 2.269, note: 'Single query readout' },
+    { h: 2, label: 'H=2',         params: 2726,  nll: 2.268, note: 'Two queries' },
+    { h: 4, label: 'H=4',         params: 4102,  nll: 2.258, note: 'Four queries' },
+    { h: 8, label: 'H=8',         params: 6854,  nll: 2.252, note: 'Eight queries' },
+    { h: 16, label: 'T2 flat',    params: 8262,  nll: 2.256, note: 'Full-rank readout (D=16)' },
+  ];
+
+  const HEAD_COLORS = [
+    '#e07a5f', '#3d5a80', '#81b29a', '#f2cc8f', '#264653',
+    '#e76f51', '#2a9d8f', '#e9c46a', '#f4a261', '#606c38',
+    '#6d597a', '#b56576', '#355070', '#eaac8b', '#bc6c25', '#7209b7'
+  ];
+
+  function initSection4() {
+    const slider = document.getElementById('headsSlider');
+    slider.addEventListener('input', () => renderSection4());
+    renderSection4();
+  }
+
+  function renderSection4() {
+    const sliderVal = parseInt(document.getElementById('headsSlider').value);
+    const headCounts = [0, 1, 2, 4, 8, 16];
+    const numHeads = headCounts[sliderVal];
+    document.getElementById('headsVal').textContent = numHeads === 16 ? '16 (full)' : numHeads;
+
+    // Render head cards
+    const vis = document.getElementById('headsVisual');
+    let cardsHtml = '';
+    if (numHeads === 0) {
+      cardsHtml = '<div style="font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-light); padding: 1rem;">No heads: just counting letter pairs (bigram baseline).</div>';
+    } else {
+      const displayHeads = Math.min(numHeads, 16);
+      for (let h = 0; h < displayHeads; h++) {
+        const color = HEAD_COLORS[h % HEAD_COLORS.length];
+        cardsHtml += `<div class="head-card active-head" style="border-color: ${color};">
+          <div class="head-icon" style="color: ${color};">Q${h + 1}</div>
+          <div>Head ${h + 1}</div>
+        </div>`;
+      }
+    }
+    vis.innerHTML = cardsHtml;
+
+    // Render NLL chart
+    renderNLLChart(numHeads);
+  }
+
+  function renderNLLChart(activeHeads) {
+    const svg = document.getElementById('nllChart');
+    const W = 680, H = 280;
+    const pad = { top: 25, right: 30, bottom: 45, left: 55 };
+    const plotW = W - pad.left - pad.right;
+    const plotH = H - pad.top - pad.bottom;
+
+    // Data points: map h to x position (using index for spacing)
+    const points = HEAD_DATA;
+    const xPositions = [0, 1, 2, 3, 4, 5]; // evenly spaced
+    const yMin = 2.20;
+    const yMax = 2.50;
+
+    function toX(i) { return pad.left + (i / 5) * plotW; }
+    function toY(nll) { return pad.top + (1 - (nll - yMin) / (yMax - yMin)) * plotH; }
+
+    let html = '';
+
+    // Grid lines
+    for (let nll = 2.20; nll <= 2.50; nll += 0.05) {
+      const y = toY(nll);
+      html += `<line x1="${pad.left}" y1="${y}" x2="${W-pad.right}" y2="${y}"
+                stroke="#eee" stroke-width="1"/>`;
+      html += `<text x="${pad.left - 8}" y="${y + 4}" text-anchor="end"
+                font-size="11" fill="var(--text-light)" font-family="var(--font-sans)">${nll.toFixed(2)}</text>`;
+    }
+
+    // Y axis label
+    html += `<text x="14" y="${pad.top + plotH/2}" text-anchor="middle"
+              font-size="12" fill="var(--text-light)" font-family="var(--font-sans)"
+              transform="rotate(-90, 14, ${pad.top + plotH/2})">NLL (lower = better)</text>`;
+
+    // X axis labels
+    points.forEach((p, i) => {
+      const x = toX(i);
+      html += `<text x="${x}" y="${H - 8}" text-anchor="middle"
+                font-size="11" fill="var(--text-light)" font-family="var(--font-sans)">${p.label}</text>`;
+      html += `<text x="${x}" y="${H - 22}" text-anchor="middle"
+                font-size="9" fill="var(--text-light)" font-family="var(--font-sans)">${p.params > 0 ? p.params + ' params' : 'baseline'}</text>`;
+    });
+
+    // Draw connecting line
+    html += '<polyline points="';
+    points.forEach((p, i) => {
+      html += `${toX(i)},${toY(p.nll)} `;
+    });
+    html += `" fill="none" stroke="var(--teal)" stroke-width="2" opacity="0.3"/>`;
+
+    // Draw points
+    points.forEach((p, i) => {
+      const x = toX(i);
+      const y = toY(p.nll);
+      const isActive = (p.h <= activeHeads) || (activeHeads >= 16 && i === 5);
+      const isCurrent = (p.h === activeHeads) || (activeHeads >= 16 && i === 5);
+
+      const r = isCurrent ? 8 : (isActive ? 6 : 5);
+      const fill = isActive ? 'var(--accent)' : '#ccc';
+      const opacity = isActive ? 1 : 0.4;
+      const strokeW = isCurrent ? 2 : 0;
+      const stroke = isCurrent ? 'var(--text)' : 'none';
+
+      html += `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" opacity="${opacity}"
+                stroke="${stroke}" stroke-width="${strokeW}"/>`;
+
+      if (isActive) {
+        html += `<text x="${x}" y="${y - 12}" text-anchor="middle"
+                  font-size="12" fill="var(--text)" font-weight="${isCurrent ? '700' : '400'}"
+                  font-family="var(--font-sans)">${p.nll.toFixed(3)}</text>`;
+      }
+    });
+
+    // Karpathy MLP reference line
+    const mlpY = toY(2.3);
+    html += `<line x1="${pad.left}" y1="${mlpY}" x2="${W-pad.right}" y2="${mlpY}"
+              stroke="var(--accent)" stroke-width="1" stroke-dasharray="6,4" opacity="0.5"/>`;
+    html += `<text x="${W-pad.right-2}" y="${mlpY - 6}" text-anchor="end"
+              font-size="10" fill="var(--accent)" font-family="var(--font-sans)" opacity="0.7">Karpathy MLP (~10k params)</text>`;
+
+    svg.innerHTML = html;
+  }
+
+
+  // ============================================================
+  // UTILITY FUNCTIONS
+  // ============================================================
+
+  function escHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Deterministic pseudo-random (for consistent layouts)
+  function mulberry32(seed) {
+    return function() {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+
+  // ============================================================
+  // INITIALIZE EVERYTHING
+  // ============================================================
+
+  document.addEventListener('DOMContentLoaded', () => {
+    initSection1();
+    initSection2();
+    initSection3();
+    initSection4();
+
+    // Auto-play section 1: step through the first name letter by letter
+    let autoPlayStep = 0;
+    const autoPlayInterval = setInterval(() => {
+      if (autoPlayStep >= currentName.length) {
+        clearInterval(autoPlayInterval);
+        return;
+      }
+      currentPos = autoPlayStep + 1;
+      updateSection1Slider();
+      renderSection1();
+      autoPlayStep++;
+    }, 700);
+  });
+
+})();
+</script>
+
+</body>
+</html>
