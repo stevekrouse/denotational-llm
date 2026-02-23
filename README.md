@@ -4,7 +4,7 @@ Conal Elliott [showed](http://conal.net/papers/essence-of-ad/) that if you start
 
 **Can we do the same thing for text prediction?** Start with a precise specification of "getting better at predicting the next character," find the algebraic structure, and see what falls out?
 
-This repo is that attempt, formalized in Agda.
+This repo is that attempt, formalized in Agda. We use Karpathy's [makemore](https://github.com/karpathy/makemore) as our concrete target — the same character-level name generation task, progressing from bigrams toward GPT-level architectures — but derived from algebraic specification rather than built up from neural network primitives.
 
 ## The analogy
 
@@ -115,4 +115,4 @@ agda --compile BigramCount.agda && ./BigramCount
 
 - Conal Elliott, [*The Simple Essence of Automatic Differentiation*](http://conal.net/papers/essence-of-ad/) (2018) — the methodological template: differentiation as a functor, representations of linear maps give AD algorithms
 - Conal Elliott, [*Compiling to Categories*](http://conal.net/papers/compiling-to-categories/) (2017) — the general methodology: define meaning, require homomorphism, solve for implementation
-- Andrej Karpathy, [makemore](https://github.com/karpathy/makemore) — the character-level language model series; our bigrams match his performance numbers
+- Andrej Karpathy, [makemore](https://github.com/karpathy/makemore) — the character-level name generation series (bigram → MLP → RNN → GPT); our concrete target task and performance benchmark
