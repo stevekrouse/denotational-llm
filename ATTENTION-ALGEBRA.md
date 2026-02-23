@@ -178,21 +178,19 @@ The honest summary: the algebra *constrains* the design space (state must be a m
 
 We tested the algebraic hierarchy on 32k names (Karpathy's makemore dataset), 200 training steps:
 
-| Model | Params | NLL | Notes |
-|-------|--------|-----|-------|
-| Count-based bigram | - | 2.455 | Optimal MLE baseline |
-| T2(R^8) raw embeddings | 2,430 | **2.279** | Param-matched to linear attn |
-| T2(R^16) raw embeddings | 8,262 | **2.247** | Our best algebraic model |
-| LinAttn De=16 Dk=Dv=8 | 1,734 | 2.366 | Learned projections |
-| LinAttn De=16 Dk=Dv=16 | 2,550 | 2.367 | Matched dim to T2 |
-| Karpathy MLP | ~200 | ~2.3 | Reference |
+| Model | Params | NLL | Params/NLL-pt |
+|-------|--------|-----|---------------|
+| Count-based bigram | - | 2.455 | - |
+| LinAttn De=16 Dk=Dv=16 | 2,550 | 2.359 | 26,599 |
+| T2(R^8) raw embeddings | 2,430 | 2.285 | 14,369 |
+| ProjT2 De=16 [query readout] | 2,038 | **2.267** | **10,846** |
+| T2(R^16) raw embeddings | 8,262 | **2.250** | 40,457 |
+| Karpathy MLP | ~10k | ~2.3 | - |
 
-**T2 beats linear attention at matched parameter count** (2.279 vs 2.367). But there is an important confound: our online training (no backprop through time) cannot train the key/value projection matrices `W_k` and `W_v`. These remain at random initialization. In T2, this is not a problem because the state uses the same embeddings `E` that receive gradient from the direct bigram path `W_p * E[prev]`. In linear attention, the projections are separate from `E` and have no gradient-receiving path.
+The key finding: **projecting at readout beats projecting at accumulation.**
 
-This reveals a **training asymmetry** between T2 and linear attention:
-- T2: embeddings are shared between the gradient-receiving path (direct bigram) and the state path. Training the bigram improves the state for free.
-- Linear attention: projections only affect the state path. Without BPTT, they cannot be trained.
+Linear attention (projecting before accumulation) can't train its Wk/Wv projections because gradients don't flow through accumulated state. Projected T2 (projecting after accumulation) puts the learned query in the gradient-receiving path, achieving NLL=2.267 with only 2,038 params — nearly matching T2(R^16)'s 2.250 at 4x fewer parameters.
 
-The algebra connects T2 to linear attention as special case to generalization. But the training dynamics favor the special case: **parameter sharing between the readout and state paths is a structural advantage** that the algebra does not predict. This is analogous to weight tying in language models -- a practical benefit that falls outside the algebraic framework.
+This reveals a **training asymmetry**: the monoid structure constrains the state, but WHERE you place learned projections relative to accumulation determines whether they can be trained. The algebra doesn't predict this; it's a consequence of gradient-based optimization interacting with the algebraic structure.
 
-A proper comparison would require either BPTT (to train projections) or a reformulation where projections appear in the gradient-receiving path. This remains future work.
+ProjT2 is the most parameter-efficient model: 6,763-10,846 params per NLL point vs T2's 14,369-40,457. It achieves this by replacing T2's D²-dimensional flat readout with a D-dimensional query-based retrieval — exactly the compression that linear attention provides, but with gradient flow intact.

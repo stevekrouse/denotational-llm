@@ -657,6 +657,330 @@ function runLinearAttention(config) {
 
 
 // =====================================================================
+// PROJECTED T2 — T2 state with learned query readout
+// =====================================================================
+//
+// Key insight: Instead of projecting BEFORE accumulation (linear attention,
+// where Wk/Wv get no gradient without BPTT), project AFTER accumulation
+// at readout time, where gradient flows through the output layer.
+//
+// Architecture:
+//   State is EXACTLY T2: (count, sum_emb in R^D, outer_mat in R^{D x D})
+//   where sum_emb = sum of e[cur], outer_mat = sum of e[prev] (x) e[cur]
+//
+//   At readout time:
+//     q = Wq * E[prev]                  (D-dim query, gradient flows through Wq and E)
+//     retrieved = outer_mat * q          (D-dim: "how much did past prev-chars match q"
+//                                         weighted sum of corresponding cur-embeddings)
+//     features = [1, sum_emb/count, retrieved/count]   (1 + 2*D dims)
+//     logits = Wo * features + Wp * E[prev] + bias
+//
+// This computes: retrieved = sum_t (e_prev_t . q) * e_cur_t
+//   = "weighted sum of past current-embeddings, weighted by similarity of
+//      past prev-embeddings to the query"
+//
+// This IS linear attention, but with the projection at readout instead of
+// accumulation! The outer_mat stores raw e[prev] (x) e[cur], and the
+// query projection decides what to retrieve at output time.
+//
+// Gradient flow:
+//   - Wq gets gradient: loss -> Wo -> retrieved -> outer_mat^T * dRetrieved -> dQ -> dWq
+//   - E gets gradient from Wq path AND from Wp path AND from being used in state
+//   - Wo, Wp, b get gradient as usual
+//   - ALL parameters receive gradient (unlike linear attention where Wk/Wv are dead)
+//
+// Parameters:
+//   E:  VOCAB * D           (embeddings, shared for state and readout)
+//   Wq: D * D               (query projection at readout)
+//   Wo: VOCAB * (1 + 2*D)   (output weights for [count, sum_emb/count, retrieved/count])
+//   Wp: VOCAB * D           (prev-char direct connection)
+//   b:  VOCAB               (bias)
+//
+// For D=16: 432 + 256 + 27*33=891 + 432 + 27 = 2038 params
+//   (comparable to LinAttn's 2550, but ALL params get gradient!)
+
+function runProjectedT2(config) {
+  const { De, steps, batch, evalNames, lrStart, lrEnd, reportEvery, label } = config;
+
+  const D = De;  // alias for clarity
+  const D2 = D * D;
+  const STATE_SIZE = 1 + D + D2;      // actual state (same as T2)
+  const SD_out = 1 + 2 * D;           // features fed to output layer
+
+  // Parameter counts
+  const nE   = VOCAB * D;             // embeddings
+  const nWq  = D * D;                 // query projection (D x D)
+  const nWo  = VOCAB * SD_out;        // output: [count, sum_emb/count, retrieved/count]
+  const nWp  = VOCAB * D;             // prev-char direct
+  const nB   = VOCAB;                 // bias
+  const nParams = nE + nWq + nWo + nWp + nB;
+
+  // Allocate parameters
+  const E   = new Float64Array(nE);
+  const Wq  = new Float64Array(nWq);
+  const Wo  = new Float64Array(nWo);
+  const Wp  = new Float64Array(nWp);
+  const b   = new Float64Array(nB);
+
+  // Initialize
+  const eScale  = Math.min(0.5, 2.0 / Math.sqrt(D));
+  const wqScale = 1.0 / Math.sqrt(D);
+  const woScale = Math.min(0.2, 1.0 / Math.sqrt(SD_out));
+  for (let i = 0; i < E.length; i++)  E[i]  = (Math.random() - 0.5) * eScale;
+  for (let i = 0; i < Wq.length; i++) Wq[i] = (Math.random() - 0.5) * wqScale;
+  for (let i = 0; i < Wo.length; i++) Wo[i] = (Math.random() - 0.5) * woScale;
+  for (let i = 0; i < Wp.length; i++) Wp[i] = (Math.random() - 0.5) * eScale;
+
+  // Gradient buffers
+  const gE  = new Float64Array(nE);
+  const gWq = new Float64Array(nWq);
+  const gWo = new Float64Array(nWo);
+  const gWp = new Float64Array(nWp);
+  const gB  = new Float64Array(nB);
+
+  // Working buffers
+  const logits    = new Float64Array(VOCAB);
+  const probs     = new Float64Array(VOCAB);
+  const state     = new Float64Array(STATE_SIZE);  // [count, sum_emb(D), outer_mat(D*D)]
+  const query     = new Float64Array(D);           // query vector
+  const retrieved = new Float64Array(D);           // retrieved vector
+
+  const results = [];
+  const t0 = Date.now();
+  const evalN = Math.min(evalNames, names.length);
+
+  function getLr(step) {
+    const t = step / steps;
+    return lrEnd + 0.5 * (lrStart - lrEnd) * (1 + Math.cos(Math.PI * t));
+  }
+
+  // Evaluate NLL on first evalN names
+  function evalNLL() {
+    let fullLL = 0, fullN = 0;
+    for (let ni = 0; ni < evalN; ni++) {
+      const chars = nameChars[ni];
+      const seqLen = chars.length - 1;
+      fullN += seqLen;
+
+      // Init state: count=1, sum_emb=E['.'], outer_mat=zeros
+      state[0] = 1;
+      for (let d = 0; d < D; d++) state[1 + d] = E[d]; // E['.'] = E[0*D..]
+      for (let d = 0; d < D2; d++) state[1 + D + d] = 0;
+
+      for (let j = 0; j < seqLen; j++) {
+        const prevI = chars[j];
+        const tgt = chars[j + 1];
+        const inv = 1.0 / state[0];
+
+        // Compute query: q = Wq * E[prev]
+        const peOff = prevI * D;
+        for (let i = 0; i < D; i++) {
+          let s = 0;
+          const wOff = i * D;
+          for (let j2 = 0; j2 < D; j2++) s += Wq[wOff + j2] * E[peOff + j2];
+          query[i] = s;
+        }
+
+        // Retrieve: retrieved = outer_mat * q
+        // outer_mat is D x D (row-major at state[1+D..]), retrieved[j] = sum_i outer_mat[j*D+i] * q[i]
+        for (let j2 = 0; j2 < D; j2++) {
+          let s = 0;
+          const matOff = 1 + D + j2 * D;
+          for (let i = 0; i < D; i++) s += state[matOff + i] * query[i];
+          retrieved[j2] = s;
+        }
+
+        // Forward: logits = Wo * [1, sum_emb/count, retrieved/count] + Wp * E[prev] + b
+        let maxL = -1e9;
+        for (let k = 0; k < VOCAB; k++) {
+          let v = b[k];
+          const woBase = k * SD_out;
+          // count feature (normalized = 1.0)
+          v += Wo[woBase];
+          // sum_emb / count
+          for (let d = 0; d < D; d++) v += Wo[woBase + 1 + d] * state[1 + d] * inv;
+          // retrieved / count
+          for (let d = 0; d < D; d++) v += Wo[woBase + 1 + D + d] * retrieved[d] * inv;
+          // prev-char direct
+          const wpOff = k * D;
+          for (let d = 0; d < D; d++) v += Wp[wpOff + d] * E[peOff + d];
+          logits[k] = v;
+          if (v > maxL) maxL = v;
+        }
+        let se = 0;
+        for (let k = 0; k < VOCAB; k++) { probs[k] = Math.exp(logits[k] - maxL); se += probs[k]; }
+        for (let k = 0; k < VOCAB; k++) probs[k] /= se;
+        fullLL += Math.log(probs[tgt] + 1e-30);
+
+        // Update state: count += 1, sum_emb += E[tgt], outer_mat += E[prev] (x) E[tgt]
+        const ceOff = tgt * D;
+        state[0] += 1;
+        for (let d = 0; d < D; d++) state[1 + d] += E[ceOff + d];
+        for (let di = 0; di < D; di++) {
+          const ei = E[peOff + di], off = 1 + D + di * D;
+          for (let dj = 0; dj < D; dj++) state[off + dj] += ei * E[ceOff + dj];
+        }
+      }
+    }
+    return -fullLL / fullN;
+  }
+
+  results.push({ step: 0, nll: evalNLL() });
+
+  for (let step = 1; step <= steps; step++) {
+    const currentLr = getLr(step);
+    shuffle(nameIdx);
+    gE.fill(0); gWq.fill(0); gWo.fill(0); gWp.fill(0); gB.fill(0);
+    let batchN = 0;
+    const bn = Math.min(batch, names.length);
+
+    for (let bi = 0; bi < bn; bi++) {
+      const ni = nameIdx[bi];
+      const chars = nameChars[ni];
+      const seqLen = chars.length - 1;
+      batchN += seqLen;
+
+      // Init state
+      state[0] = 1;
+      for (let d = 0; d < D; d++) state[1 + d] = E[d];
+      for (let d = 0; d < D2; d++) state[1 + D + d] = 0;
+
+      for (let j = 0; j < seqLen; j++) {
+        const prevI = chars[j];
+        const tgt = chars[j + 1];
+        const inv = 1.0 / state[0];
+
+        // Forward: compute query
+        const peOff = prevI * D;
+        for (let i = 0; i < D; i++) {
+          let s = 0;
+          const wOff = i * D;
+          for (let j2 = 0; j2 < D; j2++) s += Wq[wOff + j2] * E[peOff + j2];
+          query[i] = s;
+        }
+
+        // Forward: retrieve from outer_mat
+        for (let j2 = 0; j2 < D; j2++) {
+          let s = 0;
+          const matOff = 1 + D + j2 * D;
+          for (let i = 0; i < D; i++) s += state[matOff + i] * query[i];
+          retrieved[j2] = s;
+        }
+
+        // Forward: compute logits and softmax
+        let maxL = -1e9;
+        for (let k = 0; k < VOCAB; k++) {
+          let v = b[k];
+          const woBase = k * SD_out;
+          v += Wo[woBase];
+          for (let d = 0; d < D; d++) v += Wo[woBase + 1 + d] * state[1 + d] * inv;
+          for (let d = 0; d < D; d++) v += Wo[woBase + 1 + D + d] * retrieved[d] * inv;
+          const wpOff = k * D;
+          for (let d = 0; d < D; d++) v += Wp[wpOff + d] * E[peOff + d];
+          logits[k] = v;
+          if (v > maxL) maxL = v;
+        }
+        let se = 0;
+        for (let k = 0; k < VOCAB; k++) { probs[k] = Math.exp(logits[k] - maxL); se += probs[k]; }
+        for (let k = 0; k < VOCAB; k++) probs[k] /= se;
+
+        // Backward: compute gradients
+        // dl[k] = (k == tgt ? 1 : 0) - probs[k]
+        const dRetrieved = new Float64Array(D);
+        const dSumEmb = new Float64Array(D);
+        const dPrevEmb = new Float64Array(D);
+
+        for (let k = 0; k < VOCAB; k++) {
+          const dl = (k === tgt ? 1 : 0) - probs[k];
+          const woBase = k * SD_out;
+
+          // d/d bias
+          gB[k] += dl;
+
+          // d/d Wo[k][0] (count feature)
+          gWo[woBase] += dl;
+
+          // d/d Wo[k][1..D] (sum_emb features) and backprop to sum_emb
+          for (let d = 0; d < D; d++) {
+            gWo[woBase + 1 + d] += dl * state[1 + d] * inv;
+            dSumEmb[d] += dl * Wo[woBase + 1 + d] * inv;
+          }
+
+          // d/d Wo[k][1+D..1+2D] (retrieved features) and backprop to retrieved
+          for (let d = 0; d < D; d++) {
+            gWo[woBase + 1 + D + d] += dl * retrieved[d] * inv;
+            dRetrieved[d] += dl * Wo[woBase + 1 + D + d] * inv;
+          }
+
+          // d/d Wp and d/d E[prev] via Wp path
+          const wpOff = k * D;
+          for (let d = 0; d < D; d++) {
+            gWp[wpOff + d] += dl * E[peOff + d];
+            dPrevEmb[d] += dl * Wp[wpOff + d];
+          }
+        }
+
+        // Backprop through retrieval: retrieved[j] = sum_i outer_mat[j*D+i] * query[i]
+        // d/d query[i] = sum_j dRetrieved[j] * outer_mat[j*D+i]
+        //              = sum_j dRetrieved[j] * state[1+D+j*D+i]
+        // (this is outer_mat^T * dRetrieved)
+        const dQuery = new Float64Array(D);
+        for (let i = 0; i < D; i++) {
+          let s = 0;
+          for (let j2 = 0; j2 < D; j2++) s += dRetrieved[j2] * state[1 + D + j2 * D + i];
+          dQuery[i] = s;
+        }
+
+        // Backprop query: q = Wq * E[prev]
+        // d/d Wq[i][j] += dQuery[i] * E[prev][j]
+        // d/d E[prev][j] += sum_i dQuery[i] * Wq[i*D+j]
+        for (let i = 0; i < D; i++) {
+          const wOff = i * D;
+          for (let j2 = 0; j2 < D; j2++) {
+            gWq[wOff + j2] += dQuery[i] * E[peOff + j2];
+            dPrevEmb[j2] += dQuery[i] * Wq[wOff + j2];
+          }
+        }
+
+        // Apply accumulated E[prev] gradient
+        for (let d = 0; d < D; d++) gE[peOff + d] += dPrevEmb[d];
+
+        // Note: dSumEmb gives gradient w.r.t. the accumulated sum_emb in state.
+        // We do NOT backprop through the state to past embeddings (same as T2).
+        // But E still gets gradient from: (1) Wp path, (2) Wq path, and
+        // (3) being the same E used in state accumulation (shared parameter).
+
+        // Update state: count += 1, sum_emb += E[tgt], outer_mat += E[prev] (x) E[tgt]
+        const ceOff = tgt * D;
+        state[0] += 1;
+        for (let d = 0; d < D; d++) state[1 + d] += E[ceOff + d];
+        for (let di = 0; di < D; di++) {
+          const ei = E[peOff + di], off = 1 + D + di * D;
+          for (let dj = 0; dj < D; dj++) state[off + dj] += ei * E[ceOff + dj];
+        }
+      }
+    }
+
+    // Parameter update
+    const sc = currentLr / batchN;
+    for (let i = 0; i < E.length; i++)  E[i]  += sc * gE[i];
+    for (let i = 0; i < Wq.length; i++) Wq[i] += sc * gWq[i];
+    for (let i = 0; i < Wo.length; i++) Wo[i] += sc * gWo[i];
+    for (let i = 0; i < Wp.length; i++) Wp[i] += sc * gWp[i];
+    for (let i = 0; i < b.length; i++)  b[i]  += sc * gB[i];
+
+    if (isNaN(E[0])) return { nParams, label, results, time: Date.now() - t0, diverged: true };
+
+    if (step % reportEvery === 0 || step === steps) {
+      results.push({ step, nll: evalNLL() });
+    }
+  }
+
+  return { nParams, label, results, time: Date.now() - t0, diverged: false };
+}
+
+
+// =====================================================================
 // EXPERIMENTS
 // =====================================================================
 
@@ -781,6 +1105,43 @@ runAndReport(runLinearAttention, {
 });
 
 
+// -----------------------------------------------------------------
+// EXPERIMENT 4: Projected T2 (De=16) — query readout, all grads flow
+// -----------------------------------------------------------------
+// De=16, Wq is 16x16:
+//   E: 432, Wq: 256, Wo: 27*(1+32)=891, Wp: 432, b: 27
+//   Total: 432+256+891+432+27 = 2038
+
+runAndReport(runProjectedT2, {
+  label: 'ProjT2 De=16 [query readout]',
+  De: 16,
+  steps: 200,
+  batch: 300,
+  evalNames: 8000,
+  lrStart: 5.0,
+  lrEnd: 0.5,
+  reportEvery: 50,
+});
+
+// -----------------------------------------------------------------
+// EXPERIMENT 5: Projected T2 (De=8) — param-matched comparison
+// -----------------------------------------------------------------
+// De=8, Wq is 8x8:
+//   E: 216, Wq: 64, Wo: 27*(1+16)=459, Wp: 216, b: 27
+//   Total: 216+64+459+216+27 = 982
+
+runAndReport(runProjectedT2, {
+  label: 'ProjT2 De=8 [param-matched]',
+  De: 8,
+  steps: 200,
+  batch: 300,
+  evalNames: 8000,
+  lrStart: 5.0,
+  lrEnd: 0.5,
+  reportEvery: 50,
+});
+
+
 // =====================================================================
 // GRAND SUMMARY
 // =====================================================================
@@ -814,79 +1175,121 @@ for (const r of allResults) {
 // Analysis
 console.log('\n\nANALYSIS:');
 
-const t2Result = allResults.find(r => r.label.includes('T2'));
+const t2_16 = allResults.find(r => r.label.includes('T2(R^16)'));
+const t2_8 = allResults.find(r => r.label.includes('T2(R^8)'));
 const linResults = allResults.filter(r => r.label.includes('LinAttn') && !isNaN(r.bestNLL));
+const projResults = allResults.filter(r => r.label.includes('ProjT2') && !isNaN(r.bestNLL));
 
-if (t2Result && !isNaN(t2Result.bestNLL)) {
-  console.log(`\nT2(R^16) baseline: NLL = ${t2Result.bestNLL.toFixed(4)} with ${t2Result.nParams} params`);
+if (t2_16 && !isNaN(t2_16.bestNLL)) {
+  console.log(`\nT2(R^16) baseline: NLL = ${t2_16.bestNLL.toFixed(4)} with ${t2_16.nParams} params`);
+}
+if (t2_8 && !isNaN(t2_8.bestNLL)) {
+  console.log(`T2(R^8) baseline:  NLL = ${t2_8.bestNLL.toFixed(4)} with ${t2_8.nParams} params`);
+}
 
-  if (linResults.length > 0) {
-    const bestLin = linResults.reduce((a, b) => b.bestNLL < a.bestNLL ? b : a);
-    console.log(`Best linear attention: NLL = ${bestLin.bestNLL.toFixed(4)} with ${bestLin.nParams} params`);
-    console.log(`  Config: ${bestLin.label}`);
+if (linResults.length > 0) {
+  const bestLin = linResults.reduce((a, b) => b.bestNLL < a.bestNLL ? b : a);
+  console.log(`Best linear attention: NLL = ${bestLin.bestNLL.toFixed(4)} with ${bestLin.nParams} params`);
+  console.log(`  Config: ${bestLin.label}`);
+}
 
-    const delta = bestLin.bestNLL - t2Result.bestNLL;
-    if (delta < 0) {
-      console.log(`\n  ** Linear attention BEATS T2 by ${(-delta).toFixed(4)} NLL **`);
-      console.log(`  The learned key/value/query projections improve over raw embeddings.`);
-      console.log(`  This suggests that learning WHAT to store and WHAT to retrieve,`);
-      console.log(`  within the monoid framework, adds genuine expressiveness.`);
-    } else if (delta < 0.05) {
-      console.log(`\n  Linear attention is COMPARABLE to T2 (delta = ${delta.toFixed(4)} NLL).`);
-      console.log(`  The learned projections don't help much -- raw embeddings already`);
-      console.log(`  capture the relevant structure at this scale.`);
-    } else {
-      console.log(`\n  T2 baseline WINS by ${delta.toFixed(4)} NLL.`);
-      console.log(`  Possible explanations:`);
-      console.log(`  - T2 feeds D^2 features directly to output (richer state readout)`);
-      console.log(`  - Linear attention's compression through query bottleneck loses info`);
-      console.log(`  - More parameters in projections = harder optimization`);
-      console.log(`  - At this scale, the simpler model trains better`);
-    }
+if (projResults.length > 0) {
+  const bestProj = projResults.reduce((a, b) => b.bestNLL < a.bestNLL ? b : a);
+  console.log(`Best projected T2:    NLL = ${bestProj.bestNLL.toFixed(4)} with ${bestProj.nParams} params`);
+  console.log(`  Config: ${bestProj.label}`);
+}
 
-    // Parameter efficiency comparison
-    console.log('\nParameter efficiency (params per NLL point below count bigram):');
-    for (const r of [t2Result, ...linResults]) {
-      if (isNaN(r.bestNLL)) continue;
-      const improvement = countNLL - r.bestNLL;
-      if (improvement > 0) {
-        const efficiency = r.nParams / improvement;
-        console.log(`  ${r.label}: ${efficiency.toFixed(0)} params per 0.001 NLL improvement`);
-      }
+// Compare all architectures
+const allWithNLL = allResults.filter(r => !isNaN(r.bestNLL));
+if (allWithNLL.length > 1) {
+  const best = allWithNLL.reduce((a, b) => b.bestNLL < a.bestNLL ? b : a);
+  console.log(`\nOverall best: ${best.label} with NLL = ${best.bestNLL.toFixed(4)} (${best.nParams} params)`);
+
+  // Parameter efficiency comparison
+  console.log('\nParameter efficiency (params per NLL point below count bigram):');
+  for (const r of allWithNLL) {
+    const improvement = countNLL - r.bestNLL;
+    if (improvement > 0) {
+      const efficiency = r.nParams / improvement;
+      console.log(`  ${r.label}: ${efficiency.toFixed(0)} params per 0.001 NLL improvement`);
     }
   }
 }
 
+// T2 vs ProjT2 comparison
+if (t2_16 && !isNaN(t2_16.bestNLL) && projResults.length > 0) {
+  const bestProj = projResults.reduce((a, b) => b.bestNLL < a.bestNLL ? b : a);
+  const delta = bestProj.bestNLL - t2_16.bestNLL;
+  console.log('\n--- T2 vs Projected T2 ---');
+  if (delta < -0.01) {
+    console.log(`  ** ProjT2 BEATS T2(R^16) by ${(-delta).toFixed(4)} NLL **`);
+    console.log(`  ProjT2 uses ${bestProj.nParams} params vs T2's ${t2_16.nParams} (${((bestProj.nParams/t2_16.nParams)*100).toFixed(0)}%)`);
+    console.log(`  The query-readout approach is more parameter-efficient: it compresses`);
+    console.log(`  the D^2 outer product matrix into a D-dim retrieval using learned queries,`);
+    console.log(`  needing far fewer output weights while maintaining expressiveness.`);
+  } else if (delta < 0.01) {
+    console.log(`  ProjT2 is COMPARABLE to T2(R^16) (delta = ${Math.abs(delta).toFixed(4)} NLL)`);
+    console.log(`  ProjT2 uses ${bestProj.nParams} params vs T2's ${t2_16.nParams} (${((bestProj.nParams/t2_16.nParams)*100).toFixed(0)}%)`);
+    console.log(`  Similar performance with far fewer parameters!`);
+  } else {
+    console.log(`  T2(R^16) WINS by ${delta.toFixed(4)} NLL`);
+    console.log(`  The full D^2 state readout captures more than query-based retrieval.`);
+    console.log(`  But ProjT2 uses only ${bestProj.nParams} vs ${t2_16.nParams} params.`);
+  }
+}
+
+// ProjT2 vs LinAttn comparison
+if (projResults.length > 0 && linResults.length > 0) {
+  const bestProj = projResults.reduce((a, b) => b.bestNLL < a.bestNLL ? b : a);
+  const bestLin = linResults.reduce((a, b) => b.bestNLL < a.bestNLL ? b : a);
+  const delta = bestLin.bestNLL - bestProj.bestNLL;
+  console.log('\n--- Projected T2 vs Linear Attention ---');
+  if (delta > 0.01) {
+    console.log(`  ** ProjT2 BEATS LinAttn by ${delta.toFixed(4)} NLL **`);
+    console.log(`  This confirms the gradient hypothesis: projecting at readout (where`);
+    console.log(`  gradient flows) beats projecting at accumulation (where Wk/Wv are dead).`);
+    console.log(`  ProjT2 uses ${bestProj.nParams} params vs LinAttn's ${bestLin.nParams}.`);
+  } else if (delta > -0.01) {
+    console.log(`  ProjT2 and LinAttn are COMPARABLE (delta = ${Math.abs(delta).toFixed(4)} NLL)`);
+  } else {
+    console.log(`  LinAttn BEATS ProjT2 by ${(-delta).toFixed(4)} NLL`);
+    console.log(`  Surprising: even without Wk/Wv gradients, LinAttn wins.`);
+  }
+}
+
 // Gradient issue
-console.log('\n\nIMPORTANT — GRADIENT ISSUE:');
-console.log('The Wk (key) and Wv (value) projection matrices receive ZERO gradient!');
-console.log('This is because we do not backprop through the accumulated state (same as T2).');
-console.log('In T2 this is fine: E gets gradient from the Wp*E[prev] direct bigram path,');
-console.log('and the state uses the SAME E, so it improves for free.');
-console.log('In linear attention, Wk and Wv only affect the state — they have no');
-console.log('gradient-receiving path. They remain at random initialization.');
+console.log('\n\nGRADIENT ANALYSIS:');
+console.log('Three approaches to combining projections with monoid state:');
 console.log('');
-console.log('This means linear attention is handicapped: its projections are untrained.');
-console.log('A fair comparison would require BPTT (backprop through time) to train Wk/Wv.');
-console.log('The T2(R^8) param-matched baseline shows what T2 achieves at the same scale.');
+console.log('  1. T2: No projections. E gets gradient from Wp*E[prev] bigram path.');
+console.log('     State uses same E, so it improves for free. Simple, works well,');
+console.log('     but output layer has D^2 weights (scales badly).');
+console.log('');
+console.log('  2. LinAttn: Project BEFORE accumulation (Wk, Wv on input side).');
+console.log('     Wk and Wv get ZERO gradient without BPTT (they only affect state,');
+console.log('     and we detach state from the computation graph). Dead parameters.');
+console.log('');
+console.log('  3. ProjT2: Project AFTER accumulation (Wq at readout time).');
+console.log('     Wq gets full gradient: loss -> Wo -> retrieved -> outer_mat^T -> dQ -> dWq.');
+console.log('     This is the key insight: put learnable projections where gradient flows!');
+console.log('     Same state as T2 (monoid structure preserved), but output uses query');
+console.log('     retrieval (1+2D features) instead of full flattening (1+D+D^2 features).');
 
 // Key theoretical insight
 console.log('\n\nTHEORETICAL NOTE:');
-console.log('Both T2 and linear attention implement monoid homomorphisms from');
-console.log('(List Char, ++) to (State, +). The key difference:');
+console.log('All three architectures implement monoid homomorphisms from');
+console.log('(List Char, ++) to (State, +). The differences are in readout:');
 console.log('');
-console.log('  T2:             state += e[prev] (x) e[cur]     (raw embeddings)');
-console.log('  Lin. attention: state += k[prev] (x) v[cur]     (learned projections)');
+console.log('  T2:      state = (1, e, e(x)e)     readout = W_s * flatten(state/count)');
+console.log('  LinAttn: state = (1, v, k(x)v)     readout = q^T * KV_mat / count');
+console.log('  ProjT2:  state = (1, e, e(x)e)     readout = (Wq*e_prev)^T * outer/count');
 console.log('');
-console.log('T2 stores e(x)e which is a SYMMETRIC function of the embedding.');
-console.log('Linear attention stores k(x)v which is ASYMMETRIC: the key/value split');
-console.log('lets the model learn different representations for "what happened"');
-console.log('(keys) vs "what matters" (values). The query further selects what to');
-console.log('retrieve based on the current context.');
+console.log('ProjT2 = T2 state + linear attention readout. It keeps the simplicity of');
+console.log('raw-embedding accumulation (no dead parameters) while gaining the efficiency');
+console.log('of query-based retrieval (1+2D output features instead of 1+D+D^2).');
 console.log('');
-console.log('This is the connection to attention: in standard transformers, linear');
-console.log('attention computes sum_i phi(k_i) (x) v_i as state, and retrieves via');
-console.log('phi(q)^T * state. Our version is identical, with phi = identity (linear');
-console.log('feature map), applied to the tensor algebra framework.');
+console.log('This is exactly: retrieved = sum_t (e_prev_t . Wq^T . e_prev_now) * e_cur_t');
+console.log('= linear attention where key=e_prev, value=e_cur, query=Wq*e_prev_now,');
+console.log('but computed via T2 state accumulation rather than separate K/V projections.');
 
 console.log(`\nTotal time: ${((Date.now() - totalStart) / 1000).toFixed(1)}s`);

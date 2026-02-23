@@ -59,6 +59,7 @@ The empirical spec (`Spec.agda`) is still gameable, but it's now explicitly labe
   - **Beats MLP on all settings (small corpus, 32k names) while using 22% fewer parameters (162 vs 209)**
   - No nonlinearity needed — algebraic structure does the work
   - This is a genuine discovery: not a known architecture, derived directly from the monoid specification
+- The **attention-from-algebra result** (ATTENTION-ALGEBRA.md, linear-attention.js): T₂ and linear attention are both monoid homomorphisms into matrices under addition. T₂ is the special case (key=value=raw embedding). The critical insight: projections must go at READOUT (not accumulation) so gradient flows. "Projected T2" (ProjT2) — same T₂ state but with learned query at readout — achieves NLL=2.267 with only 2,038 params, nearly matching T₂(ℝ¹⁶)'s 2.250 at 4x fewer parameters. This is parameter-efficient linear attention derived from the algebra.
 
 **What we haven't done that matters:**
 - Prove why T₂(ℝ^d) is optimal (algebraic characterization of good state structures)
@@ -143,6 +144,10 @@ The real frontier questions:
 **Check agents on EVERY response.** Every time the top-level agent responds to the user (for any reason), it MUST also check on all running subagents — read their latest output, assess if they're stuck or off-track, kill and restart if needed. This is non-negotiable. Include a brief status line for each running agent in every response.
 
 **Watchdog timer.** Always keep a background "watchdog" subagent running that just sleeps for 5 minutes then completes. When it completes, you get a turn — use it to check all agents and launch a new watchdog. This ensures you never go more than 5 minutes without checking on things, even if the user is away.
+
+**Delegate heavy work.** The top-level agent should NEVER run long compilations, write large files, or do multi-step research. Always use the Task tool with subagents. The top-level agent coordinates, monitors, reports, and course-corrects.
+
+**Avoid process overload.** Never run more than 2-3 subagents simultaneously. Background bash commands and subagents all consume system resources. If the system becomes unresponsive (fork failures, exit code 1 on basic commands), stop all background tasks and wait before retrying.
 
 ## Conventions
 
