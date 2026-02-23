@@ -6,34 +6,30 @@ Conal Elliott [showed](http://conal.net/papers/essence-of-ad/) that if you start
 
 This repo is that attempt, formalized in Agda. We use Karpathy's [makemore](https://github.com/karpathy/makemore) as our concrete target — the same character-level name generation task, progressing from bigrams toward GPT-level architectures — but derived from algebraic specification rather than built up from neural network primitives.
 
-## The analogy
+## The approach
 
-| AD (Elliott 2018) | Text Prediction (this repo) |
-|---|---|
-| Differentiable function f : A → B | Predictor p : History → Dist(Char) |
-| Smooth functions form a **category** | Predictors form a **Kleisli category** |
-| Derivative is a **functor** to linear maps | Score is a **functor** to (ℝ, +) |
-| Chain rule: D(f∘g) = D(f)∘D(g) | Score decomposition: score(xs++ys) = score(xs) + score(h++xs, ys) |
-| Reps of linear maps → AD algorithms | Reps of Kleisli morphisms → architectures |
-| Forward-mode, reverse-mode, etc. | Bigram, RNN, Attention, etc. |
+Following Conal's [methodology](http://conal.net/papers/type-class-morphisms/): define the meaning precisely, require a homomorphism, and solve for the implementation. Concretely:
 
-The "chain rule" analog is score decomposition: score additively splits over corpus concatenation, with the history shifting — exactly like how AD's chain rule evaluates D(f) at g(x), not at x.
+1. **Specify** what "good predictor" means: `Predictor = List Char → Char → ℝ`, scored by log-likelihood
+2. **Find algebraic structure**: score is a monoid homomorphism from (List Char, ++) to (ℝ, +) — it decomposes over corpus concatenation
+3. **Classify representations**: restricting how the predictor uses history yields known architectures (bigram, n-gram, RNN, attention) as a strict hierarchy
+4. **Optimize**: gradient ascent on any parameterized family is a valid improvement strategy
 
 ## Status
 
-We've built the algebraic framework and proven the key structural theorems. Different representations of the Kleisli morphism `List Char → Char → ℝ` yield different architectures (bigram, n-gram, RNN, attention), each correct by construction. Gradient ascent on any parameterized family is a valid improvement strategy, derived from the specification.
+**What's working:** The specification, score decomposition, Kleisli category structure, architecture hierarchy, forward-mode AD, parameterized improvement, and executable bigrams matching Karpathy's makemore numbers.
 
-**What's working:** The specification, categorical structure, architecture hierarchy, AD, parameterized improvement, and executable bigrams that match [Karpathy's makemore](https://github.com/karpathy/makemore) numbers.
+**What's honest:** Most of this verifies known things rather than deriving new ones. Score decomposition is "log of a product = sum of logs." The architecture classification explains *why* existing architectures work, but unlike Conal's AD work — where reverse-mode via continuations was a genuine surprise — we haven't yet derived anything from the algebra that nobody knew. That's the goal.
 
-**The open question:** In Conal's work, new algorithms genuinely *fell out* of the algebra — reverse-mode AD via continuations was a surprise. We haven't gotten there yet for text prediction. We have an elegant unified explanation of *why* existing architectures work, but we haven't yet derived a novel architecture or optimization that nobody knew about. That's the goal — uncovering new representations of the Kleisli morphism that are interesting architectures, or new optimization strategies suggested by the algebraic structure.
+**What's unresolved:** The specification may not be *adequate* (in Conal's sense — can it be gamed?). A predictor that memorizes the training corpus scores perfectly. Addressing this is probably more important than building more computation on top of a possibly-wrong spec.
 
 ## Next steps
 
-1. **Scale BigramCount to 32k names** — currently uses 50 hardcoded names; read from `names.txt` and match Karpathy's NLL = 2.454 benchmark
-2. **Executable MLP** — Karpathy's makemore part 2: fixed context window, character embeddings, hidden layer. The natural next architecture on the progression.
-3. **Wire AD into training** — `Bigram.agda` uses numerical perturbation for gradients; connect `AD.agda`'s dual numbers for exact forward-mode gradients
-4. **Reverse-mode AD** — Conal's key result: reverse-mode = continuations as representation of linear maps. Practically necessary for training anything bigger than a bigram, and the exact place where a representation choice yields an algorithm.
-5. **Novel representations** — the real goal. What other representations of `List Char → Char → ℝ` exist beyond the known architectures? Can the algebraic structure suggest one?
+1. **Fix the spec** — the adequacy problem: our spec rewards memorization. How do we express "this predictor generalizes" in the type system? (Compression? Complexity bounds? Something the algebra suggests?)
+2. **Scale BigramCount to 32k names** — currently uses 50 hardcoded names; read from `names.txt` and match Karpathy's NLL = 2.454 benchmark
+3. **Executable MLP** — Karpathy's makemore part 2: fixed context window, character embeddings, hidden layer
+4. **Wire AD into training** — replace numerical perturbation with exact forward-mode gradients; then reverse-mode AD for larger models
+5. **Derive something new** — find a representation of `List Char → Char → ℝ` that the algebra *forces*, or an optimization insight that falls out of the spec
 
 ## Module dependencies
 
@@ -69,7 +65,7 @@ Solid arrows are `open import` dependencies. Dotted arrows indicate that the exe
 | `AD.agda` | Forward-mode automatic differentiation via dual numbers |
 | `Parameterize.agda` | Parameter families, gradient ascent validity |
 | `Bigram.agda` | Executable bigram trained by numerical gradient descent (10 names) |
-| `BigramCount.agda` | Executable count-based bigram via MLE (32k names from Karpathy's makemore) |
+| `BigramCount.agda` | Executable count-based bigram via MLE (50 names, needs scaling) |
 | `names.txt` | 32,032 names dataset from [Karpathy's makemore](https://github.com/karpathy/makemore) |
 
 ## Proven theorems
@@ -78,7 +74,7 @@ Solid arrows are `open import` dependencies. Dotted arrows indicate that the exe
 |---------|--------|-----------|
 | `atLeastAsGood-refl` | Spec | Improvement relation is reflexive |
 | `atLeastAsGood-trans` | Spec | Improvement relation is transitive |
-| `score-split` | Spec | Score decomposes over corpus concatenation (our "chain rule") |
+| `score-split` | Spec | Score decomposes over corpus concatenation |
 | `score-is-homomorphism` | Kleisli | Score is an indexed monoid homomorphism (unit + composition) |
 | `score-left-identity` | Kleisli | Categorical left identity |
 | `score-right-identity` | Kleisli | Categorical right identity |
@@ -89,19 +85,19 @@ Solid arrows are `open import` dependencies. Dotted arrows indicate that the exe
 | `arch-score-split` | Architectures | Score decomposition transfers to any architecture |
 | `bigram-markov` | Architectures | Bigram depends only on last character |
 | `param-improvement` | Parameterize | Better parameters imply better predictor |
-| `gradient-improves` | Parameterize | Gradient ascent step produces a better predictor |
+| `gradient-improves` | Parameterize | Gradient ascent produces a better predictor (relies on postulated lemma) |
 | `+ᴰ-val-correct`, `*ᴰ-val-correct` | AD | Dual arithmetic preserves values |
 | `+ᴰ-der-correct` | AD | Dual addition computes correct derivative |
 
 ## What's postulated
 
-| Postulate | Why |
-|-----------|-----|
-| All of `Real.agda` | ℝ as an ordered field with log/exp — standard math axioms |
-| `gradient-ascent-lemma` | Requires formalizing multivariable calculus |
-| `jensen-log` | Requires formalizing concavity of log |
-| `log-prob-is-score` | Requires threading positivity proofs (straightforward but tedious) |
-| `attn-subsumes-rnn` | Constructive but needs auxiliary lemmas about `enumerate` |
+| Postulate | Why | Severity |
+|-----------|-----|----------|
+| All of `Real.agda` | ℝ as an ordered field with log/exp — standard math axioms | Low — standard |
+| `gradient-ascent-lemma` | Requires formalizing multivariable calculus | High — this postulates the punchline of `gradient-improves` |
+| `jensen-log` | Requires formalizing concavity of log | Medium |
+| `log-prob-is-score` | Requires threading positivity proofs (tedious) | Low |
+| `attn-subsumes-rnn` | Needs auxiliary lemmas about `enumerate` | Low |
 
 ## Running it
 
@@ -115,7 +111,7 @@ agda Architectures.agda && agda AD.agda && agda Parameterize.agda
 # Compile and run the small bigram (gradient descent on 10 names)
 agda --compile Bigram.agda && ./Bigram
 
-# Compile and run the count-based bigram (MLE on 32k names)
+# Compile and run the count-based bigram (MLE on 50 names)
 agda --compile BigramCount.agda && ./BigramCount
 ```
 
