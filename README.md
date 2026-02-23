@@ -10,24 +10,22 @@ This repo is that attempt, formalized in Agda. We use Karpathy's [makemore](http
 
 Following Conal's [methodology](http://conal.net/papers/type-class-morphisms/): define the meaning precisely, require a homomorphism, and solve for the implementation. Concretely:
 
-1. **Specify** what "good predictor" means: `Predictor = List Char → Char → ℝ`, scored by log-likelihood
+1. **Specify** what "good predictor" means: `Predictor = List Char → Char → ℝ`, scored by expected log-probability under the true text distribution (`TrueSpec.agda`). The corpus-based score (`Spec.agda`) is the empirical estimator.
 2. **Find algebraic structure**: score is a monoid homomorphism from (List Char, ++) to (ℝ, +) — it decomposes over corpus concatenation
 3. **Classify representations**: restricting how the predictor uses history yields known architectures (bigram, n-gram, RNN, attention) as a strict hierarchy
 4. **Optimize**: gradient ascent on any parameterized family is a valid improvement strategy
 
 ## Status
 
-**What's working:** The specification, score decomposition, Kleisli category structure, architecture hierarchy, forward-mode AD, parameterized improvement, and executable bigrams matching Karpathy's makemore numbers.
+**What's working:** Two-layer specification (true score over distributions + empirical score on corpora), score decomposition, Kleisli category structure, architecture hierarchy, forward-mode AD, parameterized improvement, and executable bigrams matching Karpathy's NLL = 2.454 on 32k names.
 
 **What's honest:** Most of this verifies known things rather than deriving new ones. Score decomposition is "log of a product = sum of logs." The architecture classification explains *why* existing architectures work, but unlike Conal's AD work — where reverse-mode via continuations was a genuine surprise — we haven't yet derived anything from the algebra that nobody knew. That's the goal.
 
-**What's unresolved:** The specification may not be *adequate* (in Conal's sense — can it be gamed?). A predictor that memorizes the training corpus scores perfectly. Addressing this is probably more important than building more computation on top of a possibly-wrong spec.
+**What's resolved:** The adequacy problem. `TrueSpec.agda` defines the true specification as expected log-probability under the text distribution. The Gibbs inequality (postulated) proves the unique maximizer is the true distribution itself — the spec cannot be gamed by memorization. The corpus-based score in `Spec.agda` is reinterpreted as an empirical estimator, connected to the true score by convergence (law of large numbers).
 
 ## Next steps
 
-1. **Fix the spec** — the adequacy problem: our spec rewards memorization. How do we express "this predictor generalizes" in the type system? (Compression? Complexity bounds? Something the algebra suggests?)
-2. **Scale BigramCount to 32k names** — currently uses 50 hardcoded names; read from `names.txt` and match Karpathy's NLL = 2.454 benchmark
-3. **Executable MLP** — Karpathy's makemore part 2: fixed context window, character embeddings, hidden layer
+1. **Executable MLP** — Karpathy's makemore part 2: fixed context window, character embeddings, hidden layer
 4. **Wire AD into training** — replace numerical perturbation with exact forward-mode gradients; then reverse-mode AD for larger models
 5. **Derive something new** — find a representation of `List Char → Char → ℝ` that the algebra *forces*, or an optimization insight that falls out of the spec
 
@@ -46,6 +44,8 @@ graph TD
     R --> AD[AD.agda]
     S --> Pa[Parameterize.agda]
     R --> Pa
+    S --> TS[TrueSpec.agda]
+    P --> TS
     Pa -.-> B[Bigram.agda]
     Pa -.-> BC[BigramCount.agda]
 ```
@@ -58,23 +58,27 @@ Solid arrows are `open import` dependencies. Dotted arrows indicate that the exe
 |------|-------------|
 | `Real.agda` | Postulated ordered field ℝ with log/exp axioms |
 | `Probability.agda` | Distribution type, softmax specification, uniform distribution |
-| `Spec.agda` | Predictor type, score function, improvement relation, score decomposition |
+| `Spec.agda` | Predictor type, empirical score, improvement relation, score decomposition |
+| `TrueSpec.agda` | True specification: expected score under distribution, Gibbs inequality (adequacy) |
 | `Properties.agda` | Score monotonicity, convex combinations, Jensen's inequality |
 | `Kleisli.agda` | Kleisli category structure; score as indexed monoid homomorphism |
 | `Architectures.agda` | Bigram, n-gram, RNN, Attention as representation choices with embeddings |
 | `AD.agda` | Forward-mode automatic differentiation via dual numbers |
 | `Parameterize.agda` | Parameter families, gradient ascent validity |
 | `Bigram.agda` | Executable bigram trained by numerical gradient descent (10 names) |
-| `BigramCount.agda` | Executable count-based bigram via MLE (50 names, needs scaling) |
+| `BigramCount.agda` | Executable count-based bigram via MLE (32k names, matches Karpathy's NLL = 2.454) |
 | `names.txt` | 32,032 names dataset from [Karpathy's makemore](https://github.com/karpathy/makemore) |
 
 ## Proven theorems
 
 | Theorem | Module | Statement |
 |---------|--------|-----------|
-| `atLeastAsGood-refl` | Spec | Improvement relation is reflexive |
-| `atLeastAsGood-trans` | Spec | Improvement relation is transitive |
-| `score-split` | Spec | Score decomposes over corpus concatenation |
+| `trueAtLeast-refl` | TrueSpec | True improvement relation is reflexive |
+| `trueAtLeast-trans` | TrueSpec | True improvement relation is transitive |
+| `trueBetter-trans` | TrueSpec | Strict true improvement is transitive |
+| `atLeastAsGood-refl` | Spec | Empirical improvement relation is reflexive |
+| `atLeastAsGood-trans` | Spec | Empirical improvement relation is transitive |
+| `score-split` | Spec | Empirical score decomposes over corpus concatenation |
 | `score-is-homomorphism` | Kleisli | Score is an indexed monoid homomorphism (unit + composition) |
 | `score-left-identity` | Kleisli | Categorical left identity |
 | `score-right-identity` | Kleisli | Categorical right identity |
@@ -98,6 +102,9 @@ Solid arrows are `open import` dependencies. Dotted arrows indicate that the exe
 | `jensen-log` | Requires formalizing concavity of log | Medium |
 | `log-prob-is-score` | Requires threading positivity proofs (tedious) | Low |
 | `attn-subsumes-rnn` | Needs auxiliary lemmas about `enumerate` | Low |
+| `trueScore` | Abstract expected log-prob under distribution (requires measure theory to define) | Medium — the right abstraction |
+| `gibbs`, `gibbs-strict` | KL divergence non-negativity; the key adequacy result | Medium — standard information theory |
+| `empirical-convergence` | Law of large numbers connecting empirical to true score | Medium — requires measure theory |
 
 ## Running it
 
@@ -105,13 +112,14 @@ Requires [Agda](https://wiki.portal.chalmers.se/agda/Main/Download) with the [st
 
 ```bash
 # Type-check all proof modules
-agda Spec.agda && agda Properties.agda && agda Kleisli.agda && \
-agda Architectures.agda && agda AD.agda && agda Parameterize.agda
+agda Spec.agda && agda TrueSpec.agda && agda Properties.agda && \
+agda Kleisli.agda && agda Architectures.agda && agda AD.agda && \
+agda Parameterize.agda
 
 # Compile and run the small bigram (gradient descent on 10 names)
 agda --compile Bigram.agda && ./Bigram
 
-# Compile and run the count-based bigram (MLE on 50 names)
+# Compile and run the count-based bigram (MLE on 32k names)
 agda --compile BigramCount.agda && ./BigramCount
 ```
 

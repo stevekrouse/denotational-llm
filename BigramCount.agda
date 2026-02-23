@@ -15,7 +15,7 @@
 module BigramCount where
 
 open import IO
-open import Data.String.Base as String using (String; toList; fromList; _++_)
+open import Data.String.Base as String using (String; toList; fromList; _++_; lines)
 open import Data.List.Base as List using (List; []; _∷_; length; map; take; drop;
   foldr; concatMap; upTo)
   renaming (_++_ to _L++_)
@@ -23,7 +23,9 @@ open import Data.Char.Base using (Char; toℕ; fromℕ)
 open import Data.Float.Base as Float using (Float; log; show; _<ᵇ_)
 open import Data.Nat.Base as Nat using (ℕ; suc; zero; _≡ᵇ_; _≤ᵇ_; _∸_; _*_; _+_)
 open import Data.Nat.Show as ℕShow using ()
-open import Data.Bool.Base using (Bool; true; false; if_then_else_)
+open import Data.Bool.Base using (Bool; true; false; if_then_else_; not)
+open import Level using (0ℓ)
+open import Data.Unit.Polymorphic.Base using (⊤)
 
 -- ═══ ALPHABET: 27 chars (. + a-z) ═══
 
@@ -97,8 +99,9 @@ predict : List Float → List Char → Char → Float
 predict probs history c =
   lookupF probs (lastCharIdx history * alphaSize + charToIdx c)
 
--- ═══ SCORING (matches Spec.agda definition exactly) ═══
+-- ═══ SCORING ═══
 
+-- General scoring (matches Spec.agda definition exactly)
 scoreFrom : (List Char → Char → Float) → List Char → List Char → Float
 scoreFrom p h []       = 0.0
 scoreFrom p h (c ∷ cs) =
@@ -109,6 +112,21 @@ score p corpus = scoreFrom p [] corpus
 
 avgScore : (List Char → Char → Float) → List Char → Float
 avgScore p corpus = score p corpus Float.÷ Float.fromℕ (length corpus)
+
+-- Optimized bigram scoring: only track previous character (O(n) instead of O(n²))
+-- Equivalent to scoreFrom (predict probs) for bigrams, but avoids O(n²) history.
+bigramScoreFrom : List Float → Char → List Char → Float
+bigramScoreFrom _     _ []       = 0.0
+bigramScoreFrom probs prev (c ∷ cs) =
+  log (lookupF probs (charToIdx prev * alphaSize + charToIdx c))
+  Float.+ bigramScoreFrom probs c cs
+
+-- Start with '.' as initial context (matching lastCharIdx [] = 0 = charToIdx '.')
+bigramScore : List Float → List Char → Float
+bigramScore probs corpus = bigramScoreFrom probs '.' corpus
+
+bigramAvgScore : List Float → List Char → Float
+bigramAvgScore probs corpus = bigramScore probs corpus Float.÷ Float.fromℕ (length corpus)
 
 -- ═══ NAME GENERATION ═══
 
@@ -135,15 +153,58 @@ generate p (suc n) h  =
 buildBigram : List Char → List Float
 buildBigram corpus = normalize (countBigrams corpus (initTable 1.0))
 
--- ═══ CORPUS ═══
--- Start with 50 names, increase later
+-- ═══ CORPUS BUILDING ═══
 
+-- Filter a list by a boolean predicate
+filterBool : (String → Bool) → List String → List String
+filterBool _ []       = []
+filterBool f (x ∷ xs) = if f x then x ∷ filterBool f xs else filterBool f xs
+
+-- Check if a string is non-empty
+isNonEmpty : String → Bool
+isNonEmpty s with toList s
+... | []    = false
+... | _ ∷ _ = true
+
+-- Build ".name1.name2.name3." corpus from a list of names
+-- Each name is delimited by '.' on both sides (matching Karpathy's format)
+buildCorpus : List String → List Char
+buildCorpus names = toList (foldr (λ name acc → "." String.++ name String.++ acc) "." names)
+
+-- Hardcoded test corpus (50 names) — kept as fallback/test
 corpus50 : List Char
 corpus50 = toList ".emma.olivia.ava.isabella.sophia.charlotte.mia.amelia.harper.evelyn.abigail.emily.elizabeth.mila.ella.avery.sofia.camila.aria.scarlett.victoria.madison.luna.grace.chloe.penelope.layla.riley.zoey.nora.lily.eleanor.hannah.lillian.addison.aubrey.ellie.stella.natalie.zoe.leah.hazel.violet.aurora.savannah.audrey.brooklyn.bella.claire.skylar."
 
 showBool : Bool → String
 showBool true  = "true"
 showBool false = "false"
+
+-- ═══ REPORTING ═══
+
+-- Run scoring and print results for a given corpus
+reportModel : List Float → List Char → IO {0ℓ} ⊤
+reportModel probs corpus = do
+  let p = predict probs
+  let uNLL = 0.0 Float.- (log (1.0 Float.÷ Float.fromℕ alphaSize))
+  let bScore = bigramAvgScore probs corpus
+  putStrLn ("Uniform:  NLL = " String.++ Float.show uNLL
+    String.++ " (log 27)")
+  putStrLn ("Bigram:   " String.++ Float.show bScore String.++ " avg log-prob/char"
+    String.++ " (NLL = " String.++ Float.show (0.0 Float.- bScore) String.++ ")")
+  putStrLn ""
+  putStrLn "Learned P(next | prev):"
+  putStrLn ("  P(a|.) = " String.++ Float.show (p ('.' ∷ []) 'a')
+    String.++ "  P(e|.) = " String.++ Float.show (p ('.' ∷ []) 'e')
+    String.++ "  P(s|.) = " String.++ Float.show (p ('.' ∷ []) 's'))
+  putStrLn ("  P(.|a) = " String.++ Float.show (p ('a' ∷ []) '.')
+    String.++ "  P(n|a) = " String.++ Float.show (p ('a' ∷ []) 'n')
+    String.++ "  P(r|a) = " String.++ Float.show (p ('a' ∷ []) 'r'))
+  putStrLn ""
+  putStrLn "Generated (greedy):"
+  putStrLn ("  " String.++ fromList (generate p 20 ('.' ∷ [])))
+  putStrLn ("  " String.++ fromList (generate p 20 ('.' ∷ 'a' ∷ [])))
+  putStrLn ("  " String.++ fromList (generate p 20 ('.' ∷ 's' ∷ [])))
+  putStrLn ("  " String.++ fromList (generate p 20 ('.' ∷ 'k' ∷ [])))
 
 -- ═══ MAIN ═══
 
@@ -157,37 +218,16 @@ main = run do
   putStrLn "Uniform random baseline:        NLL = 3.296 (log 27)"
   putStrLn ""
 
-  let corpus = corpus50
-  putStrLn ("Corpus: 50 names, " String.++ ℕShow.show (length corpus) String.++ " chars")
+  -- Read full corpus from names.txt
+  putStrLn "Reading names.txt..."
+  contents ← readFiniteFile "names.txt"
+  let nameList = filterBool isNonEmpty (lines contents)
+  let nNames = length nameList
+  let corpus = buildCorpus nameList
+  let nChars = length corpus
+  putStrLn ("Corpus: " String.++ ℕShow.show nNames String.++ " names, "
+    String.++ ℕShow.show nChars String.++ " chars")
+  putStrLn ""
 
-  -- Uniform baseline
-  let uniform = λ (_ : List Char) (_ : Char) → 1.0 Float.÷ Float.fromℕ alphaSize
-  let uScore = avgScore uniform corpus
-  putStrLn ("Uniform:  " String.++ Float.show uScore String.++ " avg log-prob/char"
-    String.++ " (NLL = " String.++ Float.show (0.0 Float.- uScore) String.++ ")")
-
-  -- Count-based bigram
   let probs = buildBigram corpus
-  let p = predict probs
-  let bScore = avgScore p corpus
-  putStrLn ("Bigram:   " String.++ Float.show bScore String.++ " avg log-prob/char"
-    String.++ " (NLL = " String.++ Float.show (0.0 Float.- bScore) String.++ ")")
-  putStrLn ("Beats uniform: " String.++ showBool (uScore <ᵇ bScore))
-  putStrLn ""
-
-  -- Some learned probabilities
-  putStrLn "Learned P(next | prev):"
-  putStrLn ("  P(a|.) = " String.++ Float.show (p ('.' ∷ []) 'a')
-    String.++ "  P(e|.) = " String.++ Float.show (p ('.' ∷ []) 'e')
-    String.++ "  P(s|.) = " String.++ Float.show (p ('.' ∷ []) 's'))
-  putStrLn ("  P(.|a) = " String.++ Float.show (p ('a' ∷ []) '.')
-    String.++ "  P(n|a) = " String.++ Float.show (p ('a' ∷ []) 'n')
-    String.++ "  P(r|a) = " String.++ Float.show (p ('a' ∷ []) 'r'))
-  putStrLn ""
-
-  -- Generated names
-  putStrLn "Generated (greedy):"
-  putStrLn ("  " String.++ fromList (generate p 20 ('.' ∷ [])))
-  putStrLn ("  " String.++ fromList (generate p 20 ('.' ∷ 'a' ∷ [])))
-  putStrLn ("  " String.++ fromList (generate p 20 ('.' ∷ 's' ∷ [])))
-  putStrLn ("  " String.++ fromList (generate p 20 ('.' ∷ 'k' ∷ [])))
+  reportModel probs corpus
