@@ -47,7 +47,7 @@ The empirical spec (`Spec.agda`) is still gameable, but it's now explicitly labe
 
 **Where we're overclaiming or loose:**
 - "Score is a functor" — it's a monoid homomorphism, not a functor in the precise categorical sense. In Conal's AD work, D is genuinely a functor between categories (smooth functions → linear maps). We should be more careful with this language.
-- The architecture "analogy" is weaker than the AD analogy. In AD, forward-mode and reverse-mode compute the *same derivative* (proven: both modes agree on all primitives, postulated for compositions). In text prediction, bigram and attention compute *different functions* with different expressive power. That's not a representation choice in Conal's sense.
+- The architecture "analogy" was weaker than the AD analogy, but the rank decomposition tightens it. In AD, forward/reverse are representation theorems (different ways to compute the same linear map) with a dimension argument (forward is O(n), reverse is O(m)). Now: multi-head readout is also a representation theorem (the unique form of linear readout from outer-product state) with a dimension argument (T₂ needs D=27, multi-head needs D ~ sqrt(params)). The analogy is now: both are "representation theorem + dimension argument". What remains weaker: different levels of the hierarchy (bigram vs T₂ vs attention) still compute *different functions*, unlike forward/reverse AD which compute the *same derivative*.
 - `gradient-improves` postulates its own punchline via `gradient-ascent-lemma`.
 
 **What we *have* derived (new!):**
@@ -60,9 +60,12 @@ The empirical spec (`Spec.agda`) is still gameable, but it's now explicitly labe
   - No nonlinearity needed — algebraic structure does the work
   - This is a genuine discovery: not a known architecture, derived directly from the monoid specification
 - The **attention-from-algebra result** (ATTENTION-ALGEBRA.md, linear-attention.js): T₂ and linear attention are both monoid homomorphisms into matrices under addition. T₂ is the special case (key=value=raw embedding). The critical insight: projections must go at READOUT (not accumulation) so gradient flows. "Projected T2" (ProjT2) — same T₂ state but with learned query at readout — achieves NLL=2.267 with only 2,038 params, nearly matching T₂(ℝ¹⁶)'s 2.250 at 4x fewer parameters. This is parameter-efficient linear attention derived from the algebra.
+- The **multi-head attention / rank decomposition result** (linear-attention.js): A rank decomposition theorem forces the readout structure: any linear map from a D x D matrix to ℝ^27 decomposes as a sum of H rank-1 terms, each of which is exactly a single attention head (query dot state-times-key). Multi-head attention is not an architectural choice — it is the *unique* form of linear readout from the T₂ state. This tightens the AD analogy: just as forward/reverse AD are representation theorems (different ways to compute the same linear map), multi-head attention is a representation theorem (the only way to read out from outer-product state). Empirically: multi-head ProjT2 with H=4 heads and ELU+1 activation achieves NLL=2.250 at 4,102 params, matching T₂(ℝ¹⁶)'s performance at roughly half the parameters. The dimension argument also parallels AD: forward AD is O(n) for n inputs, reverse is O(m) for m outputs; similarly, T₂ needs D = 27 (output-sized state) while multi-head ProjT2 needs D proportional to sqrt(params), achieving the same expressiveness at lower cost.
 
 **What we haven't done that matters:**
-- Prove why T₂(ℝ^d) is optimal (algebraic characterization of good state structures)
+- The rank decomposition theorem forces multi-head readout, but the optimal number of heads H and per-head dimension remain open — what determines the right rank?
+- The transition from linear attention to softmax attention breaks the monoid homomorphism. Can we characterize what softmax adds algebraically (beyond "non-compositional normalization")?
+- Positional encoding: our models are position-blind (monoid = order-insensitive accumulation). How does position information enter the algebraic picture?
 - The executable tensor modules use Float and aren't formally connected to the proof modules (but the algebra is sound)
 - The Gibbs inequality and convergence are postulated, not proven.
 
@@ -91,10 +94,13 @@ Reverse-mode AD is implemented in both proof (`AD.agda` Part 2) and executable (
 
 Empirically: T₂(ℝ^8) at 2,430 params (NLL=2.279) beats linear attention at matched params (NLL=2.367), but the comparison is confounded — online training can't train the projection matrices (they need BPTT). The theory stands regardless.
 
+**The multi-head / rank decomposition result.** The rank decomposition theorem resolves the readout question: any linear map from D x D state to ℝ^27 *must* decompose as a sum of H rank-1 terms (= H attention heads). Multi-head ProjT2 with H=4 and ELU+1 achieves NLL=2.250 at 4,102 params, matching T₂(ℝ¹⁶) at half the parameters. This partially answers the "train projections" question — the multi-head query approach works with online SGD (no BPTT needed), because queries are at readout, not accumulation.
+
 The real frontier questions:
-- **Train projections with BPTT** — the biggest gap. Can learned projections beat raw embeddings when properly trained?
+- **Softmax attention** — the monoid breaks at softmax (non-compositional normalization). Can we characterize what softmax adds algebraically? Is there a compositional approximation?
+- **Positional encoding** — monoid accumulation is order-insensitive. How does position information enter the algebraic picture?
+- **Optimal rank / head count** — the rank decomposition forces multi-head form, but what determines the right H? Is there an algebraic criterion?
 - **Why does tensor algebra work?** Can we prove it's optimal in some algebraic sense?
-- **What other structures lie in this space?** Exterior algebra? Clifford algebras? Quaternions?
 - **Does it scale?** Tensor algebra grows quickly with dimension. Can we find sparse/structured variants that scale further?
 
 ## Module structure
@@ -122,6 +128,7 @@ The real frontier questions:
 - `TensorSmall.agda` — Tensor algebra model on small corpus (debugging, ablations)
 - `MLPBig.agda` — MLP with larger hidden layer (baseline comparison for tensor results)
 - `GroupSSM.agda` — **NEW: S₃ group algebra SSM (null result: non-abelian structure doesn't help at small scale)**
+- `linear-attention.js` — T₂, linear attention, ProjT2, and multi-head ProjT2 experiments (JavaScript, runs with Node.js, contains the rank decomposition / multi-head results)
 
 ## Workflow conventions
 

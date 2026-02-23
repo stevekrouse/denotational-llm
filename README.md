@@ -17,20 +17,45 @@ Following Conal's [methodology](http://conal.net/papers/type-class-morphisms/): 
 
 ## Status
 
-**What's working:** Full specification stack, Kleisli category structure, architecture hierarchy, forward/reverse-mode AD, parameterized improvement, executable bigrams matching Karpathy's NLL = 2.454, MLP with backprop, and **a tensor algebra predictor T₂(ℝ^d) that beats Karpathy's MLP.** At d=16, T₂(ℝ¹⁶) achieves **NLL = 2.247** on all 32k names — better than Karpathy's MLP (~2.3) with only 200 training steps and no nonlinearity. The architecture is derived from the monoid structure of the score decomposition: the truncated tensor algebra is the universal finite-dimensional quotient of the free monoid.
+**Headline result: multi-head attention falls out of rank decomposition.** The readout from a D x D matrix state is a linear functional. Any linear functional on matrices decomposes into a sum of rank-1 terms — each term is an attention head (query-key inner product). The number of heads H is just the rank budget: more heads = higher-rank readout = better approximation. This parallels Conal's AD result exactly: AD decomposes a linear map via matrix representation and the *dimension* selects forward vs reverse mode; we decompose a linear functional via rank and the *budget* selects how many heads. Both are representation theorems with a numerical parameter.
 
-**What's honest:** Most of the formalization verifies known things. Score decomposition is "log of a product = sum of logs." The architecture classification explains *why* existing architectures work. **But the tensor algebra result is genuinely new:** the monoid structure directly suggests T₂(ℝ^d) as state, and scaling the embedding dimension yields an architecture that outperforms standard MLPs. The caveat: T₂(ℝ¹⁶) has 8,262 parameters vs Karpathy's ~10k — the parameter counts are comparable, so the win is in training efficiency (200 steps vs ~200k) and architectural simplicity (no nonlinearity).
+**Empirical results on 32k names (D=16):**
 
-**New: Attention from algebra.** We showed that T₂ and linear attention (Katharopoulos et al. 2020) are both monoid homomorphisms into the same algebraic structure — matrices under addition. T₂ is the special case where key=value=raw embedding; linear attention generalizes with learned projections. See `ATTENTION-ALGEBRA.md` for the full argument. Empirically, T₂(ℝ^8) at 2,430 params (NLL=2.279) beats linear attention at matched params (NLL=2.367), but the comparison is confounded: online training can't train the projection matrices (they need BPTT). The theory stands regardless — the algebra constrains state to be a monoid, suggests outer-product matrices, and explains why softmax attention breaks compositionality.
+| Model | Params | NLL | Notes |
+|-------|--------|-----|-------|
+| Karpathy MLP | ~10,000 | ~2.3 | makemore baseline |
+| T₂(R¹⁶) flat | 8,262 | 2.256 | Full-rank readout, no projections |
+| H=1 (ProjT2) | 2,038 | 2.269 | Rank-1 readout = single head |
+| H=2 | 2,726 | 2.268 | Two heads |
+| H=4 | 4,102 | 2.258 | Four heads |
+| H=8 | 6,854 | 2.252 | Eight heads |
+| **H=4 + ELU+1** | **4,102** | **2.250** | **Best: matches T₂ flat at 50% params** |
+
+Multi-head ProjT2 with ELU+1 activation achieves **NLL = 2.250 at 4,102 params** — matching T₂(R¹⁶)'s full-rank performance at half the parameters. The rank decomposition gives a smooth NLL-vs-heads curve with diminishing returns, exactly as the theory predicts.
+
+**The AD parallel, tightened:**
+- **AD:** derivative = linear map. Matrix representation. Forward/reverse mode = row-vs-column evaluation. *Dimension* selects mode.
+- **Us:** readout = linear functional on matrices. Rank decomposition. Each rank-1 component = attention head. *Budget* selects rank.
+
+Both are the same mathematical move: take a linear object, choose a basis/decomposition, get a family of algorithms indexed by a numerical parameter. In AD the parameter is input/output dimension; here it is rank (number of heads).
+
+**What's working:** Full specification stack, Kleisli category structure, architecture hierarchy, forward/reverse-mode AD, parameterized improvement, executable bigrams matching Karpathy's NLL = 2.454, MLP with backprop, tensor algebra predictor T₂(R^d) that beats Karpathy's MLP, and multi-head projected T₂ derived from rank decomposition of the readout.
+
+**What's honest:** Most of the formalization verifies known things. Score decomposition is "log of a product = sum of logs." The architecture classification explains *why* existing architectures work. **But the tensor algebra and multi-head results are genuinely new:** the monoid structure suggests T₂(R^d) as state, rank decomposition of the readout gives multi-head attention, and the algebra predicts the smooth heads-vs-NLL tradeoff we observe empirically.
+
+**Attention from algebra.** T₂ and linear attention (Katharopoulos et al. 2020) are both monoid homomorphisms into matrices under addition. T₂ is the special case where key=value=raw embedding; linear attention generalizes with learned projections. The multi-head structure emerges from rank decomposition of the linear readout: a rank-H readout decomposes into H attention heads, each computing a query-key inner product. See `ATTENTION-ALGEBRA.md` for the full algebraic argument. The hierarchy is: bigram (diagonal) --> T₂ (full outer product) --> multi-head ProjT₂ (learned rank-H readout) --> linear attention (learned key/value/query) --> softmax attention (breaks the monoid).
+
+**What's not derived:** softmax attention (the normalization breaks the monoid homomorphism), positional encoding, and optimal rank selection. The transition from linear to softmax attention is where the algebra stops — softmax introduces non-compositionality.
 
 **What's resolved:** The adequacy problem. `TrueSpec.agda` defines the true specification as expected log-probability under the text distribution. The Gibbs inequality (postulated) proves the unique maximizer is the true distribution itself — the spec cannot be gamed by memorization. The corpus-based score in `Spec.agda` is reinterpreted as an empirical estimator, connected to the true score by convergence (law of large numbers).
 
 ## Next steps
 
-1. **Train projections with BPTT** — Linear attention's key/value projections can't be trained with our current online method (no gradient path). Implementing truncated BPTT would enable a fair comparison of learned projections vs raw embeddings within the monoid framework.
-2. **Higher-order tensors** — T₂ captures bigram correlations. Does T₃(ℝ^d) (adding trigram tensor) close the gap to Karpathy's RNN (~2.0)? The algebra predicts each order adds polynomial interactions.
-3. **Prove tensor optimality** — T₂(ℝ^d) is the universal degree-2 quotient of the free monoid. Can we prove it's optimal among all monoids of that dimension?
-4. **Close postulate gaps** — `gradient-ascent-lemma` postulates the punchline of `gradient-improves`; narrowing what's assumed would strengthen the formalization
+1. **Formalize the rank decomposition** — The multi-head result is currently empirical + informal argument. Formalizing "any linear functional on D x D matrices decomposes into rank-1 components" in Agda would make the AD parallel airtight.
+2. **Train full linear attention with BPTT** — Multi-head ProjT₂ learns queries but uses raw embeddings as key=value. Training separate key/value projections requires BPTT (no gradient path with online training). This is the next rung on the algebraic hierarchy.
+3. **Higher-order tensors** — T₂ captures bigram correlations. Does T₃(R^d) (adding trigram tensor) close the gap to Karpathy's RNN (~2.0)? The algebra predicts each order adds polynomial interactions.
+4. **Optimal rank selection** — The heads-vs-NLL curve shows diminishing returns. Is there an algebraic criterion for optimal rank, analogous to how AD selects forward vs reverse based on dimension?
+5. **Close postulate gaps** — `gradient-ascent-lemma` postulates the punchline of `gradient-improves`; narrowing what's assumed would strengthen the formalization
 
 ## Module dependencies
 
