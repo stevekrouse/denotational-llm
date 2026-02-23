@@ -17,17 +17,17 @@ Following Conal's [methodology](http://conal.net/papers/type-class-morphisms/): 
 
 ## Status
 
-**What's working:** Two-layer specification (true score over distributions + empirical score on corpora), score decomposition, Kleisli category structure, architecture hierarchy, forward-mode *and reverse-mode* AD, parameterized improvement, executable bigrams matching Karpathy's NLL = 2.454 on 32k names, AD-trained bigram with exact dual-number gradients, reverse-mode AD via continuations (one backward pass for all 729 parameters), MLP with reverse-mode AD training (explicit backprop, 209x faster gradients), and an executable MLP (context window + embeddings + hidden layer + softmax). **New: Tensor algebra results — a truncated tensor algebra T₂(ℝ^d) as state monoid (the universal finite-dimensional quotient of the free monoid) beats the MLP on all settings while using 22% fewer parameters (162 vs 209), with no nonlinearity needed, just linear state-to-logits. This is a genuine derivation from the monoid specification.**
+**What's working:** Full specification stack, Kleisli category structure, architecture hierarchy, forward/reverse-mode AD, parameterized improvement, executable bigrams matching Karpathy's NLL = 2.454, MLP with backprop, and **a tensor algebra predictor T₂(ℝ^d) that achieves NLL = 2.496 on all 32k names** — derived from the monoid structure, not engineered. The tensor architecture beats MLP (2.515) and approaches the count-based optimum (2.454) with 324 learned parameters and no nonlinearity.
 
-**What's honest:** Most of this verifies known things rather than deriving new ones. Score decomposition is "log of a product = sum of logs." The reverse-mode AD implementation demonstrates Conal's core pattern (continuations as representation of linear maps) and matches forward-mode output exactly — but this is reproducing Conal's known result, not a new one. The architecture classification explains *why* existing architectures work. **But we now have something genuinely new: the tensor algebra result (TensorBigram.agda) shows that the monoid structure of the score decomposition directly suggests using a concrete algebraic structure (T₂(ℝ^d)) as state, and this outperforms standard approaches.**
+**What's honest:** Most of the formalization verifies known things. Score decomposition is "log of a product = sum of logs." The architecture classification explains *why* existing architectures work. **But the tensor algebra result is genuinely new:** the monoid structure of score decomposition directly suggests T₂(ℝ^d) as state, and this outperforms standard MLP approaches at full scale (32k names, 200 training steps, NLL 2.496 vs 2.515).
 
 **What's resolved:** The adequacy problem. `TrueSpec.agda` defines the true specification as expected log-probability under the text distribution. The Gibbs inequality (postulated) proves the unique maximizer is the true distribution itself — the spec cannot be gamed by memorization. The corpus-based score in `Spec.agda` is reinterpreted as an empirical estimator, connected to the true score by convergence (law of large numbers).
 
 ## Next steps
 
-1. **Extend tensor results** — TensorBigram works, but is still limited to small hidden dimensions. Explore whether the tensor structure scales to larger models, and whether other algebraic structures (exterior algebra, Clifford algebras) offer similar improvements.
-2. **Prove tensor optimality** — The fact that T₂(ℝ^d) beats MLP suggests there's an algebraic reason. Can we characterize which state monoids are optimal for the score decomposition?
-3. **RNN with tensor state** — Apply tensor algebra as state space for an RNN: does the algebraic structure of state transitions improve over standard Tanh/ReLU cells?
+1. **Higher-order tensors** — T₂ captures bigram correlations. Does T₃(ℝ^d) (adding trigram tensor) close the gap to 2.454? The algebra predicts each order adds polynomial interactions.
+2. **Prove tensor optimality** — T₂(ℝ^d) is the universal degree-2 quotient of the free monoid. Can we prove it's optimal among all monoids of that dimension?
+3. **Scale to Karpathy's MLP** — The JS implementation already matches makemore's bigram. Can the tensor approach match makemore's MLP (~2.3 NLL) by increasing d or tensor order?
 4. **Close postulate gaps** — `gradient-ascent-lemma` postulates the punchline of `gradient-improves`; narrowing what's assumed would strengthen the formalization
 
 ## Module dependencies
@@ -84,6 +84,7 @@ Solid arrows are `open import` dependencies. Dotted arrows indicate that the exe
 | `TensorSmall.agda` | Tensor algebra model on small corpus for debugging and performance analysis |
 | `MLPBig.agda` | MLP with larger hidden layer to compete with tensor algebra (baseline for comparison) |
 | `GroupSSM.agda` | S₃ group algebra SSM: null result showing non-abelian structure doesn't help at small scale |
+| `tensor-bigram.js` | Fast JS implementation: trains tensor + MLP on all 32k names in <5s (the real benchmark) |
 | `names.txt` | 32,032 names dataset from [Karpathy's makemore](https://github.com/karpathy/makemore) |
 
 ## Proven theorems
