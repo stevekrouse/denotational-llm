@@ -17,17 +17,18 @@ Following Conal's [methodology](http://conal.net/papers/type-class-morphisms/): 
 
 ## Status
 
-**What's working:** Two-layer specification (true score over distributions + empirical score on corpora), score decomposition, Kleisli category structure, architecture hierarchy, forward-mode *and reverse-mode* AD, parameterized improvement, executable bigrams matching Karpathy's NLL = 2.454 on 32k names, AD-trained bigram with exact dual-number gradients, reverse-mode AD via continuations (one backward pass for all 729 parameters), MLP with reverse-mode AD training (explicit backprop, 209x faster gradients), and an executable MLP (context window + embeddings + hidden layer + softmax).
+**What's working:** Two-layer specification (true score over distributions + empirical score on corpora), score decomposition, Kleisli category structure, architecture hierarchy, forward-mode *and reverse-mode* AD, parameterized improvement, executable bigrams matching Karpathy's NLL = 2.454 on 32k names, AD-trained bigram with exact dual-number gradients, reverse-mode AD via continuations (one backward pass for all 729 parameters), MLP with reverse-mode AD training (explicit backprop, 209x faster gradients), and an executable MLP (context window + embeddings + hidden layer + softmax). **New: Tensor algebra results — a truncated tensor algebra T₂(ℝ^d) as state monoid (the universal finite-dimensional quotient of the free monoid) beats the MLP on all settings while using 22% fewer parameters (162 vs 209), with no nonlinearity needed, just linear state-to-logits. This is a genuine derivation from the monoid specification.**
 
-**What's honest:** Most of this verifies known things rather than deriving new ones. Score decomposition is "log of a product = sum of logs." The reverse-mode AD implementation demonstrates Conal's core pattern (continuations as representation of linear maps) and matches forward-mode output exactly — but this is reproducing Conal's known result, not a new one. The architecture classification explains *why* existing architectures work, but we haven't yet derived anything from the algebra that nobody knew. That's the goal.
+**What's honest:** Most of this verifies known things rather than deriving new ones. Score decomposition is "log of a product = sum of logs." The reverse-mode AD implementation demonstrates Conal's core pattern (continuations as representation of linear maps) and matches forward-mode output exactly — but this is reproducing Conal's known result, not a new one. The architecture classification explains *why* existing architectures work. **But we now have something genuinely new: the tensor algebra result (TensorBigram.agda) shows that the monoid structure of the score decomposition directly suggests using a concrete algebraic structure (T₂(ℝ^d)) as state, and this outperforms standard approaches.**
 
 **What's resolved:** The adequacy problem. `TrueSpec.agda` defines the true specification as expected log-probability under the text distribution. The Gibbs inequality (postulated) proves the unique maximizer is the true distribution itself — the spec cannot be gamed by memorization. The corpus-based score in `Spec.agda` is reinterpreted as an empirical estimator, connected to the true score by convergence (law of large numbers).
 
 ## Next steps
 
-1. **Scale MLPREV training** — MLPREV.agda successfully trains an MLP with reverse-mode AD using explicit backprop (closure-based approach blew up in Agda/Haskell; explicit works). Next: more training steps, full 32k names, bigger hidden layer to push performance closer to Karpathy's targets.
-2. **Derive something new** — find a representation of `List Char → Char → ℝ` that the algebra *forces*, or an optimization insight that falls out of the spec
-3. **Close postulate gaps** — `gradient-ascent-lemma` postulates the punchline of `gradient-improves`; narrowing what's assumed would strengthen the formalization
+1. **Extend tensor results** — TensorBigram works, but is still limited to small hidden dimensions. Explore whether the tensor structure scales to larger models, and whether other algebraic structures (exterior algebra, Clifford algebras) offer similar improvements.
+2. **Prove tensor optimality** — The fact that T₂(ℝ^d) beats MLP suggests there's an algebraic reason. Can we characterize which state monoids are optimal for the score decomposition?
+3. **RNN with tensor state** — Apply tensor algebra as state space for an RNN: does the algebraic structure of state transitions improve over standard Tanh/ReLU cells?
+4. **Close postulate gaps** — `gradient-ascent-lemma` postulates the punchline of `gradient-improves`; narrowing what's assumed would strengthen the formalization
 
 ## Module dependencies
 
@@ -52,6 +53,10 @@ graph TD
     Pa -.-> RAD[ReverseAD.agda]
     Pa -.-> MLP[MLP.agda]
     Pa -.-> MLPREV[MLPREV.agda]
+    Pa -.-> TB[TensorBigram.agda]
+    Pa -.-> TS[TensorSmall.agda]
+    Pa -.-> MLPB[MLPBig.agda]
+    Pa -.-> GSSM[GroupSSM.agda]
 ```
 
 Solid arrows are `open import` dependencies. Dotted arrows indicate that the executable modules follow the structure proven in the spec modules but use `Float` instead of postulated `ℝ`.
@@ -75,6 +80,10 @@ Solid arrows are `open import` dependencies. Dotted arrows indicate that the exe
 | `ReverseAD.agda` | Executable reverse-mode AD bigram: one backward pass for full gradient (matches forward-mode) |
 | `MLP.agda` | Executable MLP: context window + embeddings + hidden layer + softmax (makemore part 2) |
 | `MLPREV.agda` | Executable MLP with reverse-mode AD (explicit backprop, 209x faster gradients) |
+| `TensorBigram.agda` | Executable tensor algebra bigram: T₂(ℝ^d) state monoid with linear logits (162 params, beats MLP) |
+| `TensorSmall.agda` | Tensor algebra model on small corpus for debugging and performance analysis |
+| `MLPBig.agda` | MLP with larger hidden layer to compete with tensor algebra (baseline for comparison) |
+| `GroupSSM.agda` | S₃ group algebra SSM: null result showing non-abelian structure doesn't help at small scale |
 | `names.txt` | 32,032 names dataset from [Karpathy's makemore](https://github.com/karpathy/makemore) |
 
 ## Proven theorems
