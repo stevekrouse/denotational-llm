@@ -62,11 +62,11 @@ Follow Karpathy's [makemore](https://github.com/karpathy/makemore) progression (
 
 ## Next steps
 
-### 1. Scale MLP to 32k names
-The MLP exists and trains on a small corpus (makemore part 2: context window + embeddings + hidden layer + softmax, 209 parameters). Next: scale it to the full `names.txt` dataset and benchmark against Karpathy's numbers. May need reverse-mode AD first for training speed.
+### 1. Scale MLPREV training -- DONE
+Reverse-mode AD is now integrated into MLP training (`MLPREV.agda`). Key finding: closure-based reverse-mode (using lazy thunks to accumulate gradients) blew up in Agda and Haskell due to memory buildup from thunks. Switched to explicit backprop (manually threading gradients backward through the network) — works cleanly and efficiently. Next: scale training (more steps, full 32k names, larger hidden layer) to push performance closer to Karpathy's targets.
 
 ### 2. Reverse-mode AD -- DONE
-Reverse-mode AD is implemented in both proof (`AD.agda` Part 2) and executable (`ReverseAD.agda`) forms. The proof module defines `Rev` (single-variable backpropagator) and `RevN` (multi-input backpropagator), with value preservation proofs and the `rev-gradient-improves` theorem. The executable module demonstrates the 729x speedup (1 pass vs 729 for bigram's gradient). Results match forward-mode exactly. Next: wire reverse-mode into MLP training for practical speedup on 209 parameters.
+Reverse-mode AD is implemented in both proof (`AD.agda` Part 2) and executable (`ReverseAD.agda`) forms. The proof module defines `Rev` (single-variable backpropagator) and `RevN` (multi-input backpropagator), with value preservation proofs and the `rev-gradient-improves` theorem. The executable module demonstrates the speedup on bigram gradients. Results match forward-mode exactly.
 
 ### 3. Close postulate gaps
 - `log-prob-is-score`: threading positivity proofs (tedious but straightforward)
@@ -97,6 +97,7 @@ The real test of whether this project succeeds in Conal's sense. Don't just clas
 - `BigramAD.agda` — bigram with forward-mode AD training (10 names)
 - `MLP.agda` — MLP with context window, embeddings, hidden layer (small corpus, 209 params)
 - `ReverseAD.agda` — bigram with reverse-mode AD training (1 pass for full gradient vs 729)
+- `MLPREV.agda` — MLP with explicit backprop reverse-mode AD (closure-based approach failed; explicit works)
 
 ## Workflow conventions
 

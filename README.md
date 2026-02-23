@@ -17,7 +17,7 @@ Following Conal's [methodology](http://conal.net/papers/type-class-morphisms/): 
 
 ## Status
 
-**What's working:** Two-layer specification (true score over distributions + empirical score on corpora), score decomposition, Kleisli category structure, architecture hierarchy, forward-mode *and reverse-mode* AD, parameterized improvement, executable bigrams matching Karpathy's NLL = 2.454 on 32k names, AD-trained bigram with exact dual-number gradients, reverse-mode AD via continuations (one backward pass for all 729 parameters), and an executable MLP (context window + embeddings + hidden layer + softmax).
+**What's working:** Two-layer specification (true score over distributions + empirical score on corpora), score decomposition, Kleisli category structure, architecture hierarchy, forward-mode *and reverse-mode* AD, parameterized improvement, executable bigrams matching Karpathy's NLL = 2.454 on 32k names, AD-trained bigram with exact dual-number gradients, reverse-mode AD via continuations (one backward pass for all 729 parameters), MLP with reverse-mode AD training (explicit backprop, 209x faster gradients), and an executable MLP (context window + embeddings + hidden layer + softmax).
 
 **What's honest:** Most of this verifies known things rather than deriving new ones. Score decomposition is "log of a product = sum of logs." The reverse-mode AD implementation demonstrates Conal's core pattern (continuations as representation of linear maps) and matches forward-mode output exactly — but this is reproducing Conal's known result, not a new one. The architecture classification explains *why* existing architectures work, but we haven't yet derived anything from the algebra that nobody knew. That's the goal.
 
@@ -25,7 +25,7 @@ Following Conal's [methodology](http://conal.net/papers/type-class-morphisms/): 
 
 ## Next steps
 
-1. **Train MLP with reverse-mode AD** — the MLP has 209 parameters; forward-mode needs 209 passes per gradient step. Reverse-mode AD (now implemented) computes the full gradient in one backward pass. Wire them together for practical MLP training on 32k names.
+1. **Scale MLPREV training** — MLPREV.agda successfully trains an MLP with reverse-mode AD using explicit backprop (closure-based approach blew up in Agda/Haskell; explicit works). Next: more training steps, full 32k names, bigger hidden layer to push performance closer to Karpathy's targets.
 2. **Derive something new** — find a representation of `List Char → Char → ℝ` that the algebra *forces*, or an optimization insight that falls out of the spec
 3. **Close postulate gaps** — `gradient-ascent-lemma` postulates the punchline of `gradient-improves`; narrowing what's assumed would strengthen the formalization
 
@@ -51,6 +51,7 @@ graph TD
     Pa -.-> BAD[BigramAD.agda]
     Pa -.-> RAD[ReverseAD.agda]
     Pa -.-> MLP[MLP.agda]
+    Pa -.-> MLPREV[MLPREV.agda]
 ```
 
 Solid arrows are `open import` dependencies. Dotted arrows indicate that the executable modules follow the structure proven in the spec modules but use `Float` instead of postulated `ℝ`.
@@ -73,6 +74,7 @@ Solid arrows are `open import` dependencies. Dotted arrows indicate that the exe
 | `BigramAD.agda` | Executable bigram trained with forward-mode AD dual numbers (exact gradients) |
 | `ReverseAD.agda` | Executable reverse-mode AD bigram: one backward pass for full gradient (matches forward-mode) |
 | `MLP.agda` | Executable MLP: context window + embeddings + hidden layer + softmax (makemore part 2) |
+| `MLPREV.agda` | Executable MLP with reverse-mode AD (explicit backprop, 209x faster gradients) |
 | `names.txt` | 32,032 names dataset from [Karpathy's makemore](https://github.com/karpathy/makemore) |
 
 ## Proven theorems
@@ -141,6 +143,9 @@ agda --compile ReverseAD.agda && ./ReverseAD
 
 # Compile and run the MLP (context window + embeddings + hidden layer)
 agda --compile MLP.agda && ./MLP
+
+# Compile and run the MLP with reverse-mode AD training (explicit backprop)
+agda --compile MLPREV.agda && ./MLPREV
 ```
 
 ## References
