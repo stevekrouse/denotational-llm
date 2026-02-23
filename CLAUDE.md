@@ -125,7 +125,13 @@ The real frontier questions:
 
 ## Workflow conventions
 
-**Top-level agent = coordinator.** The top-level Claude agent should NOT do heavy work (writing Agda, long compilations, research). Instead it:
+### ⚠️ WATCHDOG TIMER — SET UP IMMEDIATELY ON EVERY SESSION ⚠️
+
+On the VERY FIRST response of every session, launch a background watchdog: `sleep 300` (5 min). When it completes, you get a turn — check all agents, report status, launch a new watchdog. This ensures you never go >5 minutes without checking on things even if the user is away. **This is the first thing you do. Before any other work.**
+
+### Top-level agent = coordinator
+
+The top-level Claude agent should NOT do heavy work (writing Agda, long compilations, research). Instead it:
 - Dispatches work to subagents immediately — never wait for user direction
 - Always has subagents running, pushing toward the top-level goal
 - Monitors progress and stops agents that go off-track
@@ -133,19 +139,15 @@ The real frontier questions:
 - Stays free to respond to the human at any time
 - When a subagent finishes, immediately launch the next piece of work
 
+**Check agents on EVERY response.** Every time the top-level agent responds to the user (for any reason), it MUST also check on all running subagents — read their latest output, assess if they're stuck or off-track, kill and restart if needed. This is non-negotiable. Include a brief status line for each running agent in every response.
+
+**Delegate heavy work.** The top-level agent should NEVER run long compilations, write large files, or do multi-step research. Always use the Task tool with subagents. The top-level agent coordinates, monitors, reports, and course-corrects.
+
 **Fast feedback loops.** Default to low timeouts everywhere:
 - Agda type-check (`agda Foo.agda`): 30s timeout. If it fails, fix the error, don't wait longer.
 - Agda compile (`agda --compile Foo.agda`): 60s timeout. If it times out, try type-checking first (faster), then compile.
 - Running executables: 30s timeout. If slow, test on smaller input first.
 - Never set 600s timeouts. If something takes >60s, break it into smaller steps or find a workaround.
-
-**All heavy work in subagents.** Compilation, file writing, research — all go to subagents. The top-level agent coordinates and communicates.
-
-**Check agents on EVERY response.** Every time the top-level agent responds to the user (for any reason), it MUST also check on all running subagents — read their latest output, assess if they're stuck or off-track, kill and restart if needed. This is non-negotiable. Include a brief status line for each running agent in every response.
-
-**Watchdog timer.** Always keep a background "watchdog" subagent running that just sleeps for 5 minutes then completes. When it completes, you get a turn — use it to check all agents and launch a new watchdog. This ensures you never go more than 5 minutes without checking on things, even if the user is away.
-
-**Delegate heavy work.** The top-level agent should NEVER run long compilations, write large files, or do multi-step research. Always use the Task tool with subagents. The top-level agent coordinates, monitors, reports, and course-corrects.
 
 **Avoid process overload.** Never run more than 2-3 subagents simultaneously. Background bash commands and subagents all consume system resources. If the system becomes unresponsive (fork failures, exit code 1 on basic commands), stop all background tasks and wait before retrying.
 

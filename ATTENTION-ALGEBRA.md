@@ -194,3 +194,57 @@ Linear attention (projecting before accumulation) can't train its Wk/Wv projecti
 This reveals a **training asymmetry**: the monoid structure constrains the state, but WHERE you place learned projections relative to accumulation determines whether they can be trained. The algebra doesn't predict this; it's a consequence of gradient-based optimization interacting with the algebraic structure.
 
 ProjT2 is the most parameter-efficient model: 6,763-10,846 params per NLL point vs T2's 14,369-40,457. It achieves this by replacing T2's D²-dimensional flat readout with a D-dimensional query-based retrieval — exactly the compression that linear attention provides, but with gradient flow intact.
+
+
+## Multi-head attention as rank decomposition of readout
+
+### The theorem
+
+**Theorem (Readout Rank Decomposition):** Any linear readout of a D×D matrix state decomposes into independent attention heads.
+
+*Proof sketch:*
+
+1. State M is D×D (from the monoid constraint — T₂ accumulates `e_prev ⊗ e_cur`)
+2. The most general linear readout for vocabulary position k is: `logits[k] = tr(W_k^T · M)` for some D×D matrix W_k
+3. Write the rank decomposition of W_k: `W_k = Σ_{h=1}^{r} q_{k,h} · v_{k,h}^T` where r = rank(W_k)
+4. Then: `tr(W_k^T · M) = Σ_h tr((q_{k,h} · v_{k,h}^T)^T · M) = Σ_h v_{k,h}^T · M · q_{k,h}`
+5. Each rank-1 term `v^T · M · q` is exactly one attention head: query q retrieves from M, projected by v
+6. Therefore: **any linear readout of matrix state = multi-head attention**
+
+This is exactly what we implemented:
+- **T₂ flat readout:** `logits[k] = Σ_{i,j} W_s[k,i,j] * M[i,j]` — this IS rank-D readout (D heads, each using a column of W_s as query)
+- **ProjT2 (H=1):** `logits[k] = w_o[k]^T · (M · Wq · e_prev)` — rank-1 readout (1 head)
+- **Multi-head ProjT2 (H heads):** rank-H readout (H heads)
+
+### The parallel to AD
+
+| Aspect | AD (Conal) | Attention (ours) |
+|--------|-----------|------------------|
+| Object | derivative = linear map D→D' | readout = linear functional on D×D matrices |
+| Representation theorem | linear map = matrix | linear functional on matrices = sum of rank-1 terms |
+| Rank parameter | input dimension (forward) vs output dimension (reverse) | number of attention heads |
+| Special cases | forward-mode (column-by-column, cheap when D'<D), reverse-mode (row-by-row, cheap when D<D') | full readout (rank-D, expensive = T₂ flat), low-rank readout (rank-H, cheap = multi-head ProjT2) |
+| What forces the choice | dimension of the input/output space (computational budget) | parameter budget (how many heads can you afford?) |
+
+In AD: the derivative IS a linear map, and you choose forward or reverse mode based on dimensions. The representation is forced; only the mode is free.
+
+In attention: the readout IS a multi-linear functional on matrix state, and you choose rank (number of heads) based on parameter budget. The decomposition is forced; only the rank is free.
+
+### What this closes
+
+This closes the gap identified earlier: we said "the readout choice (flat vs query) wasn't forced by the algebra." Now it IS forced:
+- Given matrix state M (from monoid constraint)
+- Any linear readout = multi-head attention (from rank decomposition)
+- Number of heads = rank = the one free parameter
+
+The architecture hierarchy becomes:
+- **Bigram**: diagonal state, trivial readout — 0 heads
+- **T₂ flat**: full matrix state, rank-D readout — D heads (maximum)
+- **Multi-head ProjT2**: full matrix state, rank-H readout — H heads (chosen by budget)
+- **ProjT2**: full matrix state, rank-1 readout — 1 head (minimum non-trivial)
+
+### What's still not derived (honest)
+- **Softmax attention**: breaks monoid, not covered by this theorem
+- **Positional encoding**: the monoid framework is position-agnostic
+- **The optimal rank**: the theorem says any rank works, but doesn't say which rank is best (empirically: diminishing returns suggest intermediate rank)
+- **Query sharing**: our multi-head uses separate queries per head but shared across vocab positions. The theorem allows per-position queries (more general)
