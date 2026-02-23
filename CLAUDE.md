@@ -108,7 +108,11 @@ The real test of whether this project succeeds in Conal's sense. Don't just clas
 - Stays free to respond to the human at any time
 - When a subagent finishes, immediately launch the next piece of work
 
-**Fast feedback loops.** Default to low timeouts (30s–60s for compilation, 120s max). Take many small steps rather than one long blocking operation. Only increase timeouts incrementally when absolutely necessary.
+**Fast feedback loops.** Default to low timeouts everywhere:
+- Agda type-check (`agda Foo.agda`): 30s timeout. If it fails, fix the error, don't wait longer.
+- Agda compile (`agda --compile Foo.agda`): 60s timeout. If it times out, try type-checking first (faster), then compile.
+- Running executables: 30s timeout. If slow, test on smaller input first.
+- Never set 600s timeouts. If something takes >60s, break it into smaller steps or find a workaround.
 
 **All heavy work in subagents.** Compilation, file writing, research — all go to subagents. The top-level agent coordinates and communicates.
 

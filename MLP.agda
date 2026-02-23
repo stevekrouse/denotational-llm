@@ -24,6 +24,10 @@
 -- passes per gradient step. Slow but correct.
 -- (Reverse-mode AD would reduce this to 1 pass — see AD.agda.)
 --
+-- Data: reads names.txt (32k names, Karpathy's makemore dataset).
+-- Trains on a subset (100 names) for speed with forward-mode AD,
+-- evaluates on the full 32k names for comparison with Karpathy.
+--
 -- This is the executable (Float) counterpart — the proof
 -- modules (Spec.agda, AD.agda) guarantee the algebraic
 -- properties hold for any Predictor, including this one.
@@ -31,7 +35,7 @@
 module MLP where
 
 open import IO
-open import Data.String.Base as String using (String; toList; fromList; _++_)
+open import Data.String.Base as String using (String; toList; fromList; _++_; lines)
 open import Data.List.Base as List using (List; []; _∷_; length; map; take;
   drop; zipWith; foldr; concatMap; upTo; replicate)
   renaming (_++_ to _L++_)
@@ -396,6 +400,40 @@ scoreFromD p h (c ∷ cs) =
 scoreD : (List Char → Char → DualF) → List Char → DualF
 scoreD p corpus = scoreFromD p [] corpus
 
+-- Optimized MLP scoring: only track last contextLen chars as context (O(n))
+-- The MLP only looks at the last contextLen chars anyway via lastNIdx,
+-- so we avoid building up a growing history list.
+-- We keep ctx as a short list (at most contextLen chars).
+-- After scoring char c, shift the window: drop oldest if full, append c.
+keepLast : List Char → Char → List Char
+keepLast ctx c =
+  let extended = ctx L++ (c ∷ [])
+      n = length extended
+  in drop (n ∸ contextLen) extended
+
+mlpScoreFrom : List Float → List Char → List Char → Float
+mlpScoreFrom θ ctx []       = 0.0
+mlpScoreFrom θ ctx (c ∷ cs) =
+  log (mlpPredictor θ ctx c) Float.+ mlpScoreFrom θ (keepLast ctx c) cs
+
+-- Score the whole corpus with efficient context tracking
+mlpScore : List Float → List Char → Float
+mlpScore θ corpus = mlpScoreFrom θ [] corpus
+
+mlpAvgScore : List Float → List Char → Float
+mlpAvgScore θ corpus = mlpScore θ corpus Float.÷ Float.fromℕ (length corpus)
+
+-- Optimized dual-number MLP scoring with context window (O(n))
+-- Mirrors mlpScoreFrom but with DualF for AD
+mlpScoreFromD : List DualF → List Char → List Char → DualF
+mlpScoreFromD θ ctx []       = constDF 0.0
+mlpScoreFromD θ ctx (c ∷ cs) =
+  let newCtx = keepLast ctx c
+  in logD (mlpPredictorD θ ctx c) +D mlpScoreFromD θ newCtx cs
+
+mlpScoreD : List DualF → List Char → DualF
+mlpScoreD θ corpus = mlpScoreFromD θ [] corpus
+
 -- ═══════════════════════════════════════════════════════════
 -- SECTION 9: FORWARD-MODE AD GRADIENT
 -- ═══════════════════════════════════════════════════════════
@@ -407,11 +445,11 @@ seedParams []       _       = []
 seedParams (θ ∷ θs) zero    = varDF θ ∷ map constDF θs
 seedParams (θ ∷ θs) (suc i) = constDF θ ∷ seedParams θs i
 
--- Compute one partial derivative
+-- Compute one partial derivative (using optimized context-window scorer)
 partialI : List Float → List Char → ℕ → Float
 partialI θ corpus i =
   let θD = seedParams θ i
-  in der (scoreD (mlpPredictorD θD) corpus)
+  in der (mlpScoreD θD corpus)
 
 -- Compute full gradient (one forward pass per parameter)
 gradient : List Float → List Char → List Float
@@ -479,13 +517,29 @@ generateName p (suc n) h  =
      else next ∷ generateName p n (h L++ (next ∷ []))
 
 -- ═══════════════════════════════════════════════════════════
--- SECTION 13: CORPUS
+-- SECTION 13: CORPUS BUILDING (from file)
 -- ═══════════════════════════════════════════════════════════
--- Small hardcoded corpus for fast compilation.
 
--- 10 names: small enough for forward-mode AD to finish in minutes
-nameCorpus : List Char
-nameCorpus = toList ".emma.olivia.ava.sophia.isabella.mia.charlotte.amelia.harper.evelyn."
+-- Filter a list by a boolean predicate
+filterBool : (String → Bool) → List String → List String
+filterBool _ []       = []
+filterBool f (x ∷ xs) = if f x then x ∷ filterBool f xs else filterBool f xs
+
+-- Check if a string is non-empty
+isNonEmpty : String → Bool
+isNonEmpty s with toList s
+... | []    = false
+... | _ ∷ _ = true
+
+-- Build ".name1.name2.name3." corpus from a list of names
+buildCorpus : List String → List Char
+buildCorpus names = toList (foldr (λ name acc → "." String.++ name String.++ acc) "." names)
+
+-- Number of names to train on (keep small for forward-mode AD).
+-- With 209 params, each gradient step = 209 forward passes over the corpus.
+-- 500 names ~ 3000 chars keeps each step around ~630k forward calls.
+trainNames : ℕ
+trainNames = 500
 
 -- ═══════════════════════════════════════════════════════════
 -- SECTION 14: MAIN
@@ -508,44 +562,81 @@ main = run do
   putStrLn ("  Total params:   " String.++ ℕShow.show totalParams)
   putStrLn ""
 
-  -- Baseline
-  let uniform = λ (_ : List Char) (_ : Char) → 1.0 Float.÷ Float.fromℕ alphaSize
-  let uScore  = avgScoreF uniform nameCorpus
-  putStrLn ("Baseline (uniform): " String.++ Float.show uScore String.++ " avg log-prob/char")
-  putStrLn ("  (NLL = " String.++ Float.show (0.0 Float.- uScore) String.++ ")")
+  -- Karpathy reference
+  putStrLn "Karpathy's MLP on 32k names: NLL ~ 2.3 (part 2)"
+  putStrLn "Karpathy's bigram on 32k:    NLL = 2.454"
+  putStrLn "Uniform random baseline:     NLL = 3.296 (log 27)"
+  putStrLn ""
+
+  -- Read full corpus from names.txt
+  putStrLn "Reading names.txt..."
+  contents ← readFiniteFile "names.txt"
+  let allNames   = filterBool isNonEmpty (lines contents)
+  let nAllNames  = length allNames
+  let fullCorpus = buildCorpus allNames
+  let nFullChars = length fullCorpus
+  putStrLn ("Full corpus:  " String.++ ℕShow.show nAllNames String.++ " names, "
+    String.++ ℕShow.show nFullChars String.++ " chars")
+
+  -- Training subset
+  let trainNameList = take trainNames allNames
+  let nTrainNames   = length trainNameList
+  let trainCorpus   = buildCorpus trainNameList
+  let nTrainChars   = length trainCorpus
+  putStrLn ("Train corpus: " String.++ ℕShow.show nTrainNames String.++ " names, "
+    String.++ ℕShow.show nTrainChars String.++ " chars")
+  putStrLn ""
+
+  -- Baseline on full corpus
+  let uNLL = 0.0 Float.- (log (1.0 Float.÷ Float.fromℕ alphaSize))
+  putStrLn ("Uniform baseline NLL: " String.++ Float.show uNLL)
   putStrLn ""
 
   -- Initialize
   let θ₀ = initSmall totalParams
-  let s₀ = avgScoreF (mlpPredictor θ₀) nameCorpus
-  putStrLn ("Initial MLP:        " String.++ Float.show s₀ String.++ " avg log-prob/char")
+  let s₀train = mlpAvgScore θ₀ trainCorpus
+  putStrLn ("Initial MLP (train): " String.++ Float.show s₀train
+    String.++ " avg log-prob/char (NLL = " String.++ Float.show (0.0 Float.- s₀train) String.++ ")")
   putStrLn ""
 
-  putStrLn "Training (forward-mode AD, 209 passes per step)..."
+  putStrLn ("Training on " String.++ ℕShow.show nTrainNames
+    String.++ " names (forward-mode AD, " String.++ ℕShow.show totalParams
+    String.++ " passes per step)...")
 
-  -- Train 10 steps
-  let θ₁₀  = train 10 θ₀ nameCorpus
-  let s₁₀  = avgScoreF (mlpPredictor θ₁₀) nameCorpus
-  putStrLn ("  step 10: " String.++ Float.show s₁₀ String.++ " avg/char")
+  -- Train 5 steps
+  let θ₅   = train 5 θ₀ trainCorpus
+  let s₅   = mlpAvgScore θ₅ trainCorpus
+  putStrLn ("  step  5:  NLL = " String.++ Float.show (0.0 Float.- s₅))
+
+  -- Train 5 more steps (10 total)
+  let θ₁₀ = train 5 θ₅ trainCorpus
+  let s₁₀ = mlpAvgScore θ₁₀ trainCorpus
+  putStrLn ("  step 10:  NLL = " String.++ Float.show (0.0 Float.- s₁₀))
 
   -- Train 10 more steps (20 total)
-  let θ₂₀ = train 10 θ₁₀ nameCorpus
-  let s₂₀ = avgScoreF (mlpPredictor θ₂₀) nameCorpus
-  putStrLn ("  step 20: " String.++ Float.show s₂₀ String.++ " avg/char")
+  let θ₂₀ = train 10 θ₁₀ trainCorpus
+  let s₂₀train = mlpAvgScore θ₂₀ trainCorpus
+  putStrLn ("  step 20:  NLL = " String.++ Float.show (0.0 Float.- s₂₀train))
+  putStrLn ""
 
-  -- Train 30 more steps (50 total)
-  let θ₅₀ = train 30 θ₂₀ nameCorpus
-  let s₅₀ = avgScoreF (mlpPredictor θ₅₀) nameCorpus
-  putStrLn ("  step 50: " String.++ Float.show s₅₀ String.++ " avg/char")
+  -- Evaluate on full corpus
+  putStrLn "Evaluating on full 32k corpus..."
+  let s₂₀full = mlpAvgScore θ₂₀ fullCorpus
   putStrLn ""
 
   -- Report
-  putStrLn ("NLL after training: " String.++ Float.show (0.0 Float.- s₅₀))
-  putStrLn ("Improved over uniform? " String.++ showBool (uScore <ᵇ s₅₀))
+  putStrLn "═══ Results ═══"
+  putStrLn ("Training NLL (" String.++ ℕShow.show nTrainNames String.++ " names):  "
+    String.++ Float.show (0.0 Float.- s₂₀train))
+  putStrLn ("Full eval NLL (" String.++ ℕShow.show nAllNames String.++ " names): "
+    String.++ Float.show (0.0 Float.- s₂₀full))
+  putStrLn ("Karpathy bigram:                  2.454")
+  putStrLn ("Karpathy MLP (part 2):            ~2.3")
+  putStrLn ("Uniform random:                   " String.++ Float.show uNLL)
   putStrLn ""
 
   -- Generate
-  let p = mlpPredictor θ₅₀
+  let p = mlpPredictor θ₂₀
   putStrLn "Generated names (greedy decoding):"
   putStrLn ("  " String.++ fromList (generateName p 20 (toList ".")))
   putStrLn ("  " String.++ fromList (generateName p 20 (toList ".a")))
