@@ -96,6 +96,18 @@ The real test of whether this project succeeds in Conal's sense. Don't just clas
 - `BigramAD.agda` — bigram with forward-mode AD training (10 names)
 - `MLP.agda` — MLP with context window, embeddings, hidden layer (small corpus, 209 params)
 
+## Workflow conventions
+
+**Top-level agent = coordinator.** The top-level Claude agent should NOT do heavy work (writing Agda, long compilations, research). Instead it:
+- Dispatches work to subagents
+- Monitors progress and stops agents that go off-track
+- Reports status to the human
+- Stays free to respond to the human at any time
+
+**Fast feedback loops.** Default to low timeouts (30s–60s for compilation, 120s max). Take many small steps rather than one long blocking operation. Only increase timeouts incrementally when absolutely necessary.
+
+**All heavy work in subagents.** Compilation, file writing, research — all go to subagents. The top-level agent coordinates and communicates.
+
 ## Conventions
 
 - Proof modules use postulated ℝ from `Real.agda`; executable modules use `Float`
