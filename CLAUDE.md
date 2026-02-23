@@ -116,6 +116,8 @@ The real test of whether this project succeeds in Conal's sense. Don't just clas
 
 **All heavy work in subagents.** Compilation, file writing, research — all go to subagents. The top-level agent coordinates and communicates.
 
+**Check agents on EVERY response.** Every time the top-level agent responds to the user (for any reason), it MUST also check on all running subagents — read their latest output, assess if they're stuck or off-track, kill and restart if needed. This is non-negotiable. Include a brief status line for each running agent in every response.
+
 ## Conventions
 
 - Proof modules use postulated ℝ from `Real.agda`; executable modules use `Float`
