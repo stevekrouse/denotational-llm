@@ -545,8 +545,8 @@ footer a { color: var(--teal); }
      ============================================================ -->
 <header>
   <h1>Why Does Attention Work?</h1>
-  <p class="subtitle">Multi-head attention falls out of pure algebra.<br>
-    No neural networks assumed. Just "what does good prediction mean?"</p>
+  <p class="subtitle">Multi-head attention falls out of pure algebra. Not designed. Derived.<br>
+    The same mathematical move Conal Elliott found in automatic differentiation.</p>
 </header>
 
 <!-- ============================================================
@@ -554,6 +554,13 @@ footer a { color: var(--teal); }
      ============================================================ -->
 <section id="sec-prediction">
   <h2>1. What is prediction?</h2>
+  <p>
+    Most people think transformers were designed by clever engineers. We show that
+    attention &mdash; the core mechanism &mdash; is mathematically inevitable.
+    Starting from "what does good prediction mean?", the algebra leads directly
+    to multi-head attention. This parallels Conal Elliott's discovery that
+    forward-mode and reverse-mode AD are forced by the algebra of linear maps.
+  </p>
   <p>
     Imagine you are predicting the next letter in a name. You have seen some letters
     already, and you need to guess what comes next. A good predictor assigns
@@ -1172,6 +1179,13 @@ footer a { color: var(--teal); }
     a numerical parameter: in AD it is dimension (forward vs reverse); here it is
     rank (number of heads).
   </div>
+
+  <p>
+    This is the deepest claim of this project: attention is not an engineering artifact.
+    Like the two modes of AD, it is a mathematical inevitability &mdash; the unique way
+    to decompose a linear readout of matrix state. The number of heads, like the choice
+    of forward vs reverse mode, is the only degree of freedom.
+  </p>
 </section>
 
 <!-- ============================================================

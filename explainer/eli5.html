@@ -398,6 +398,40 @@ footer a:hover { text-decoration: underline; }
 </div>
 
 <!-- ============================================================ -->
+<!-- WHY THIS MATTERS -->
+<!-- ============================================================ -->
+<section id="s-why" class="fade-in" style="border-top: none; padding-top: 0;">
+  <div style="background: var(--teal-bg); border: 1px solid var(--teal-light); border-radius: 12px; padding: 1.5rem 1.8rem; margin-bottom: 1rem;">
+    <h2 style="font-size: 1.4rem; margin-bottom: 0.8rem;">Why This Matters</h2>
+    <p>
+      In 2017, Google researchers invented the "transformer" — the architecture
+      behind ChatGPT, Claude, and every modern AI. At its heart is something called
+      <strong>attention</strong>: the AI reads text by shining multiple spotlights on
+      its notes, asking different questions from different angles.
+    </p>
+    <p>
+      Everyone assumed attention was a clever engineering trick — something humans
+      designed through trial and error, like designing a faster car engine.
+      We show that is wrong. Starting from just one rule — "what does it mean to
+      predict text well?" — the math leads you directly to attention. It is not a
+      design choice. It is the only thing that works.
+    </p>
+    <p>
+      This is like discovering that E=mc<sup>2</sup> is not just a useful formula
+      someone dreamed up — it is the only possibility once you accept a few basic
+      principles.
+    </p>
+    <p style="margin-bottom: 0;">
+      A mathematician named Conal Elliott proved the same kind of thing for a
+      different piece of AI: he showed that the two ways of computing derivatives
+      (used to train every neural network) are not engineering choices either — they
+      are the same mathematical object viewed from two angles. We found the same
+      pattern in attention: it is not designed, it is <em>derived</em>.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
 <!-- SECTION 1: THE PREDICTION GAME -->
 <!-- ============================================================ -->
 <section id="s-game" class="fade-in">
@@ -685,6 +719,12 @@ footer a:hover { text-decoration: underline; }
     AI language model — is literally "reading a heatmap with multiple flashlights."
   </p>
   <p>
+    And here is the remarkable part: we did not design this. We did not start by studying
+    ChatGPT and reverse-engineering how it works. We started from one rule — the tearing
+    rule — and the math led us here. Attention is not a clever invention. It is the only
+    possibility.
+  </p>
+  <p>
     What is wild is that we did not start with attention. We started with just one rule:
     <strong>your notebook must work even if torn in half.</strong> Everything else — the heatmap,
     the flashlights, the diminishing returns — fell out of pure logic.
@@ -710,6 +750,14 @@ footer a:hover { text-decoration: underline; }
     This is the core discovery: the architecture that powers modern AI is not an arbitrary
     engineering choice. It is the natural answer to "how do you keep a tearable notebook?"
   </p>
+
+  <div style="background: var(--bg-alt); border-left: 4px solid var(--teal); border-radius: 0 8px 8px 0; padding: 1rem 1.2rem; margin: 1rem 0; font-size: 0.92rem;">
+    <strong>What makes this special?</strong> A mathematician named Conal Elliott proved
+    something similar for a different part of AI. He showed that the way we train neural
+    networks (called "automatic differentiation") is not a design choice — it is forced by
+    the math. We found the same pattern: attention is not designed, it is derived. Both are
+    cases of "there is really only one way to do this, and the math tells you what it is."
+  </div>
 </section>
 
 <!-- ============================================================ -->
