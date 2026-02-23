@@ -1,2 +1,9 @@
 _build/
 .claude/
+MAlonzo/
+Bigram
+BigramAD
+BigramCount
+ReverseAD
+MLP
+MLPREV
