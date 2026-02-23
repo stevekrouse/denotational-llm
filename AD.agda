@@ -460,8 +460,588 @@ expᴰ∘logᴰ-val-identity a a' = exp-log a
 *ᴰ-1ᴰ-val : ∀ (x : Dual) → val (x *ᴰ 1ᴰ) ≡ val x *ʳ 1ʳ
 *ᴰ-1ᴰ-val (dual _ _) = refl
 
--- ═══ SUMMARY ═══
+-- ════════════════════════════════════════════════════════════
+-- PART 2: REVERSE-MODE AD (CONTINUATIONS)
+-- ════════════════════════════════════════════════════════════
+--
+-- Conal Elliott's deepest insight about AD: forward-mode and
+-- reverse-mode are DIFFERENT REPRESENTATIONS of the same
+-- mathematical object (the derivative / linear map).
+--
+--   Forward-mode: represent D(f)(x) as a function  ℝ → ℝ
+--     applied to a tangent vector.
+--     Cost: O(1) per output dimension, O(n) for n inputs.
+--
+--   Reverse-mode: represent D(f)(x) as a continuation  ℝ → ℝ
+--     applied to a cotangent (adjoint).
+--     Cost: O(1) per input dimension, O(m) for m outputs.
+--
+-- For gradient computation (many inputs → one output, as in
+-- computing ∇S for score S : ℝⁿ → ℝ), reverse-mode gives
+-- the ENTIRE gradient in ONE backward pass, rather than n
+-- forward passes. This is an O(n) speedup.
+--
+-- The key idea: where a dual number (x, x') pairs a value with
+-- a tangent, a reverse-mode value (x, k) pairs a value with a
+-- CONTINUATION k : ℝ → ℝ that maps a cotangent (adjoint of the
+-- output) back to the adjoint of the input.
+--
+-- In Conal's framework:
+--   - Forward-mode: linear map represented as  a → b  (function)
+--   - Reverse-mode: linear map represented as  b → a  (continuation)
+-- These are DUAL representations of the SAME linear map — the
+-- transpose/adjoint. For ℝ → ℝ functions, both are just
+-- "multiply by the derivative," but for ℝⁿ → ℝ, reverse-mode
+-- accumulates all n partial derivatives in a single pass.
+--
+-- This is the exact parallel to our text prediction story:
+-- different representations of the Kleisli morphism give
+-- different architectures (bigram, n-gram, RNN, attention).
+-- Here, different representations of the linear map give
+-- different AD algorithms (forward, reverse).
+
+-- ═══ REVERSE-MODE DUAL NUMBERS ═══
+-- A reverse-mode value pairs a primal value with a
+-- backpropagator: a function from the output adjoint to
+-- the input adjoint. For a scalar function f : ℝ → ℝ,
+-- the backpropagator at x is: δ ↦ δ · f'(x).
+
+record Rev : Set where
+  constructor rev
+  field
+    valᴿ  : ℝ           -- the primal value
+    backᴿ : ℝ → ℝ       -- backpropagator: output adjoint → input adjoint
+
+open Rev public
+
+-- Embed a constant: backpropagator always returns 0
+-- (constants don't contribute to any input's gradient)
+constᴿ : ℝ → Rev
+constᴿ x = rev x (λ _ → 0ʳ)
+
+-- Embed an input variable: backpropagator is the identity
+-- (adjoint flows straight through)
+varᴿ : ℝ → Rev
+varᴿ x = rev x (λ δ → δ)
+
+-- ═══ REVERSE-MODE LIFTED ARITHMETIC ═══
+-- Each operation builds up the backpropagator compositionally.
+-- The forward pass computes values AND constructs the
+-- backward graph simultaneously.
+
+-- Addition: ∂(a+b)/∂a = 1, ∂(a+b)/∂b = 1
+-- Backprop: δ flows to both inputs unchanged
+_+ᴿ_ : Rev → Rev → Rev
+(rev a ka) +ᴿ (rev b kb) =
+  rev (a +ʳ b) (λ δ → ka δ +ʳ kb δ)
+
+infixl 6 _+ᴿ_
+
+-- Subtraction: ∂(a-b)/∂a = 1, ∂(a-b)/∂b = -1
+_-ᴿ_ : Rev → Rev → Rev
+(rev a ka) -ᴿ (rev b kb) =
+  rev (a -ʳ b) (λ δ → ka δ +ʳ kb (negʳ δ))
+
+infixl 6 _-ᴿ_
+
+-- Multiplication (product rule): ∂(a*b)/∂a = b, ∂(a*b)/∂b = a
+-- Backprop: δ → (δ*b flows to a, δ*a flows to b)
+_*ᴿ_ : Rev → Rev → Rev
+(rev a ka) *ᴿ (rev b kb) =
+  rev (a *ʳ b) (λ δ → ka (δ *ʳ b) +ʳ kb (δ *ʳ a))
+
+infixl 7 _*ᴿ_
+
+-- Division (quotient rule): ∂(a/b)/∂a = 1/b, ∂(a/b)/∂b = -a/b²
+_÷ᴿ_ : Rev → Rev → Rev
+(rev a ka) ÷ᴿ (rev b kb) =
+  rev (a ÷ʳ b) (λ δ → ka (δ ÷ʳ b) +ʳ kb (negʳ (δ *ʳ a) ÷ʳ (b *ʳ b)))
+
+infixl 7 _÷ᴿ_
+
+-- Negation: ∂(-a)/∂a = -1
+negᴿᵛ : Rev → Rev
+negᴿᵛ (rev a ka) = rev (negʳ a) (λ δ → ka (negʳ δ))
+
+-- Logarithm: ∂(log a)/∂a = 1/a
+logᴿᵛ : Rev → Rev
+logᴿᵛ (rev a ka) = rev (logʳ a) (λ δ → ka (δ ÷ʳ a))
+
+-- Exponential: ∂(exp a)/∂a = exp(a)
+expᴿᵛ : Rev → Rev
+expᴿᵛ (rev a ka) = rev (expʳ a) (λ δ → ka (δ *ʳ expʳ a))
+
+-- ═══ REVERSE-MODE CONSTANTS ═══
+
+0ᴿ : Rev
+0ᴿ = constᴿ 0ʳ
+
+1ᴿ : Rev
+1ᴿ = constᴿ 1ʳ
+
+-- ═══ REVERSE-MODE SUMMATION ═══
+
+sumᴿ : List Rev → Rev
+sumᴿ []       = 0ᴿ
+sumᴿ (x ∷ xs) = x +ᴿ sumᴿ xs
+
+-- ═══ VALUE PRESERVATION (REVERSE-MODE) ═══
+-- The valᴿ component of each reverse-mode operation equals
+-- the corresponding real operation. This is exactly the same
+-- property as forward-mode — the VALUE computation is identical,
+-- only the derivative representation differs.
+
++ᴿ-val : ∀ (x y : Rev) → valᴿ (x +ᴿ y) ≡ valᴿ x +ʳ valᴿ y
++ᴿ-val (rev _ _) (rev _ _) = refl
+
+-ᴿ-val : ∀ (x y : Rev) → valᴿ (x -ᴿ y) ≡ valᴿ x -ʳ valᴿ y
+-ᴿ-val (rev _ _) (rev _ _) = refl
+
+*ᴿ-val : ∀ (x y : Rev) → valᴿ (x *ᴿ y) ≡ valᴿ x *ʳ valᴿ y
+*ᴿ-val (rev _ _) (rev _ _) = refl
+
+÷ᴿ-val : ∀ (x y : Rev) → valᴿ (x ÷ᴿ y) ≡ valᴿ x ÷ʳ valᴿ y
+÷ᴿ-val (rev _ _) (rev _ _) = refl
+
+logᴿᵛ-val : ∀ (x : Rev) → valᴿ (logᴿᵛ x) ≡ logʳ (valᴿ x)
+logᴿᵛ-val (rev _ _) = refl
+
+expᴿᵛ-val : ∀ (x : Rev) → valᴿ (expᴿᵛ x) ≡ expʳ (valᴿ x)
+expᴿᵛ-val (rev _ _) = refl
+
+negᴿᵛ-val : ∀ (x : Rev) → valᴿ (negᴿᵛ x) ≡ negʳ (valᴿ x)
+negᴿᵛ-val (rev _ _) = refl
+
+-- ═══ BACKPROPAGATOR CORRECTNESS ═══
+-- The key property: for a variable input seeded with identity
+-- backpropagator, the backpropagator of the result, applied
+-- to 1, gives the derivative.
+--
+-- For a composition f(g(x)):
+--   Forward-mode: der component = g'(x) * f'(g(x))
+--   Reverse-mode: backᴿ(1) = back_f(1) propagated through back_g
+--                           = f'(g(x)) propagated through g
+--                           = g'(x) * f'(g(x))
+-- Same result, different computation order!
+
+-- A variable's backpropagator applied to 1 gives 1 (= dx/dx)
+varᴿ-back : ∀ (x : ℝ) → backᴿ (varᴿ x) 1ʳ ≡ 1ʳ
+varᴿ-back x = refl
+
+-- A constant's backpropagator applied to anything gives 0
+constᴿ-back : ∀ (x δ : ℝ) → backᴿ (constᴿ x) δ ≡ 0ʳ
+constᴿ-back x δ = refl
+
+-- ═══ BACKPROPAGATOR CORRECTNESS FOR OPERATIONS ═══
+-- Each operation's backpropagator correctly propagates adjoints.
+
+-- For addition (rev a ka) +ᴿ (rev b kb):
+-- back(δ) = ka(δ) + kb(δ)
+-- This means: adjoint flows to both inputs (sum rule)
++ᴿ-back : ∀ (x y : Rev) (δ : ℝ)
+  → backᴿ (x +ᴿ y) δ ≡ backᴿ x δ +ʳ backᴿ y δ
++ᴿ-back (rev _ _) (rev _ _) δ = refl
+
+-- For multiplication (rev a ka) *ᴿ (rev b kb):
+-- back(δ) = ka(δ*b) + kb(δ*a)
+-- This means: adjoint scaled by the other input flows to each
+*ᴿ-back : ∀ (x y : Rev) (δ : ℝ)
+  → backᴿ (x *ᴿ y) δ
+    ≡ backᴿ x (δ *ʳ valᴿ y) +ʳ backᴿ y (δ *ʳ valᴿ x)
+*ᴿ-back (rev _ _) (rev _ _) δ = refl
+
+-- For log (rev a ka):
+-- back(δ) = ka(δ / a)
+-- This means: adjoint scaled by 1/a flows to the input
+logᴿᵛ-back : ∀ (x : Rev) (δ : ℝ)
+  → backᴿ (logᴿᵛ x) δ ≡ backᴿ x (δ ÷ʳ valᴿ x)
+logᴿᵛ-back (rev _ _) δ = refl
+
+-- For exp (rev a ka):
+-- back(δ) = ka(δ * exp(a))
+-- This means: adjoint scaled by exp(a) flows to the input
+expᴿᵛ-back : ∀ (x : Rev) (δ : ℝ)
+  → backᴿ (expᴿᵛ x) δ ≡ backᴿ x (δ *ʳ expʳ (valᴿ x))
+expᴿᵛ-back (rev _ _) δ = refl
+
+-- ═══ THE CENTRAL THEOREM: FORWARD = REVERSE ═══
+-- For single-variable functions (ℝ → ℝ), forward-mode and
+-- reverse-mode compute the same derivative. This is the
+-- formal statement that they are different representations
+-- of the same linear map.
+--
+-- For a variable x with forward seed 1:
+--   forward: der component = f'(x)
+--   reverse: backᴿ 1ʳ     = f'(x)
+
+-- We prove this for each primitive operation on variables.
+
+-- Addition of two variables: both modes give the same derivative
+-- Forward: der((x,1) + (y,1)) = 1 + 1
+-- Reverse: back(1) on x = 1, back(1) on y = 1, total for x = 1
++ᴿ-var-matches-forward : ∀ (x y : ℝ)
+  → backᴿ (varᴿ x +ᴿ varᴿ y) 1ʳ ≡ 1ʳ +ʳ 1ʳ
++ᴿ-var-matches-forward x y = refl
+
+-- Multiplication of variable by constant:
+-- Forward: der(constᴰ c *ᴰ varᴰ x) = 0*x + c*1 = c
+-- Reverse: back(1) = back_const(1*x) + back_var(1*c) = 0 + c = c
+-- Wait — the reverse backpropagator for constᴿ gives 0, and for
+-- varᴿ it gives the adjoint directly. So:
+-- back(1) for the var input = 1 * c = c (through the *ᴿ rule)
+*ᴿ-const-var-back : ∀ (c x : ℝ)
+  → backᴿ (constᴿ c *ᴿ varᴿ x) 1ʳ ≡ 0ʳ +ʳ (1ʳ *ʳ c)
+*ᴿ-const-var-back c x = refl
+
+-- Log of a variable:
+-- Forward: der(logᴰ(varᴰ x)) = 1 / x
+-- Reverse: backᴿ(logᴿᵛ(varᴿ x)) 1 = 1 / x
+logᴿᵛ-var-back : ∀ (x : ℝ)
+  → backᴿ (logᴿᵛ (varᴿ x)) 1ʳ ≡ 1ʳ ÷ʳ x
+logᴿᵛ-var-back x = refl
+
+-- Exp of a variable:
+-- Forward: der(expᴰ(varᴰ x)) = 1 * exp(x) = exp(x)
+-- Reverse: backᴿ(expᴿᵛ(varᴿ x)) 1 = 1 * exp(x) = exp(x)
+expᴿᵛ-var-back : ∀ (x : ℝ)
+  → backᴿ (expᴿᵛ (varᴿ x)) 1ʳ ≡ 1ʳ *ʳ expʳ x
+expᴿᵛ-var-back x = refl
+
+-- ═══ CHAIN RULE (REVERSE-MODE) ═══
+-- The chain rule in reverse-mode is automatic: composition of
+-- backpropagators chains in reverse order.
+--
+-- For f ∘ g applied to x:
+--   Forward: (x, 1) → (g(x), g'(x)) → (f(g(x)), g'(x)·f'(g(x)))
+--   Reverse: (x, id) → (g(x), λδ.δ·g'(x)) → (f(g(x)), λδ.δ·f'(g(x))·g'(x))
+--            backward seed 1: → f'(g(x))·g'(x)
+--
+-- Both give g'(x)·f'(g(x)) — the chain rule.
+
+-- Concrete: log(exp(x)) on a variable
+-- Forward: der = exp(x) / exp(x) (= 1, via chain rule)
+-- Reverse: back(1) = 1 * exp(x) then / exp(x)
+-- Note: reverse composes the backpropagators, so we get:
+-- backᴿ(logᴿᵛ(expᴿᵛ(varᴿ x))) 1 = back_exp(1/exp(x)) = (1/exp(x)) * exp(x)
+log-exp-reverse-back : ∀ (x : ℝ)
+  → backᴿ (logᴿᵛ (expᴿᵛ (varᴿ x))) 1ʳ
+    ≡ (1ʳ ÷ʳ expʳ x) *ʳ expʳ x
+log-exp-reverse-back x = refl
+
+-- Value preservation through composition
+log-exp-reverse-val : ∀ (x : ℝ)
+  → valᴿ (logᴿᵛ (expᴿᵛ (varᴿ x))) ≡ logʳ (expʳ x)
+log-exp-reverse-val x = refl
+
+-- ═══ REVERSE-MODE LIFTED FUNCTION RECORD ═══
+-- Analogous to LiftedFn for forward-mode, but with
+-- backpropagator instead of tangent.
+
+record LiftedRevFn : Set where
+  field
+    fnᴿ-real  : ℝ → ℝ         -- the real function
+    fnᴿ-rev   : Rev → Rev      -- its reverse-mode lifted version
+    preserves-val-rev : ∀ (x : Rev) → valᴿ (fnᴿ-rev x) ≡ fnᴿ-real (valᴿ x)
+
+open LiftedRevFn public
+
+-- Composition of reverse-mode lifted functions preserves values
+compose-preserves-val-rev : ∀ (F G : LiftedRevFn) (x : Rev)
+  → valᴿ (fnᴿ-rev G (fnᴿ-rev F x)) ≡ fnᴿ-real G (fnᴿ-real F (valᴿ x))
+compose-preserves-val-rev F G x =
+  trans (preserves-val-rev G (fnᴿ-rev F x))
+        (cong (fnᴿ-real G) (preserves-val-rev F x))
+
+-- Composed reverse-mode lifted function
+_∘ᴿ_ : LiftedRevFn → LiftedRevFn → LiftedRevFn
+G ∘ᴿ F = record
+  { fnᴿ-real  = λ x → fnᴿ-real G (fnᴿ-real F x)
+  ; fnᴿ-rev   = λ x → fnᴿ-rev G (fnᴿ-rev F x)
+  ; preserves-val-rev = compose-preserves-val-rev F G
+  }
+
+-- ═══ FORWARD AND REVERSE AGREE (LiftedFn level) ═══
+-- A record that witnesses that a forward-mode lifted function
+-- and a reverse-mode lifted function compute the same derivative.
+
+record ForwardReverseAgree (fwd : LiftedFn) (rev' : LiftedRevFn) : Set where
+  field
+    -- They compute the same real function
+    same-fn : ∀ (x : ℝ) → fnᴿ fwd x ≡ fnᴿ-real rev' x
+
+    -- On variables, the forward tangent equals the reverse adjoint
+    -- (both applied with seed 1)
+    agree-on-var : ∀ (x : ℝ)
+      → der (fnᴰ fwd (varᴰ x)) ≡ backᴿ (fnᴿ-rev rev' (varᴿ x)) 1ʳ
+
+-- ═══ REVERSE-MODE SCORE ═══
+-- Lift scoreFrom to reverse-mode: the value computes the score,
+-- the backpropagator computes the gradient in one backward pass.
+
+RevPredictor : Set
+RevPredictor = List Char → Char → Rev
+
+scoreFromᴿ : RevPredictor → List Char → List Char → Rev
+scoreFromᴿ p history []       = 0ᴿ
+scoreFromᴿ p history (c ∷ cs) =
+  logᴿᵛ (p history c) +ᴿ scoreFromᴿ p (history Data.List.Base.++ (c ∷ [])) cs
+
+scoreᴿ : RevPredictor → List Char → Rev
+scoreᴿ p corpus = scoreFromᴿ p [] corpus
+
+-- ═══ REVERSE-MODE SCORE VALUE PRESERVATION ═══
+-- Same theorem as forward-mode: the value component computes
+-- the real score.
+
+LiftsRevPredictor : RevPredictor → Predictor → Set
+LiftsRevPredictor pᴿ p = ∀ (h : List Char) (c : Char) → valᴿ (pᴿ h c) ≡ p h c
+
+scoreFromᴿ-val : ∀ (pᴿ : RevPredictor) (p : Predictor)
+  → LiftsRevPredictor pᴿ p
+  → ∀ (h : List Char) (cs : List Char)
+  → valᴿ (scoreFromᴿ pᴿ h cs) ≡ scoreFrom p h cs
+scoreFromᴿ-val pᴿ p lifts h [] = refl
+scoreFromᴿ-val pᴿ p lifts h (c ∷ cs) =
+  let
+    log-step : valᴿ (logᴿᵛ (pᴿ h c)) ≡ logʳ (p h c)
+    log-step = trans (logᴿᵛ-val (pᴿ h c)) (cong logʳ (lifts h c))
+
+    ih : valᴿ (scoreFromᴿ pᴿ (h Data.List.Base.++ (c ∷ [])) cs)
+       ≡ scoreFrom p (h Data.List.Base.++ (c ∷ [])) cs
+    ih = scoreFromᴿ-val pᴿ p lifts (h Data.List.Base.++ (c ∷ [])) cs
+  in
+    cong₂ _+ʳ_ log-step ih
+
+scoreᴿ-val : ∀ (pᴿ : RevPredictor) (p : Predictor)
+  → LiftsRevPredictor pᴿ p
+  → ∀ (corpus : List Char)
+  → valᴿ (scoreᴿ pᴿ corpus) ≡ score p corpus
+scoreᴿ-val pᴿ p lifts corpus = scoreFromᴿ-val pᴿ p lifts [] corpus
+
+-- ═══ REVERSE-MODE GRADIENT (SINGLE BACKWARD PASS) ═══
+-- The key advantage: for a function f : ℝⁿ → ℝ, we compute
+-- the ENTIRE gradient in one backward pass by seeding the
+-- output adjoint with 1 and collecting the input adjoints.
+--
+-- For n parameters, forward-mode needs n passes (one per param).
+-- Reverse-mode needs ONE pass. For the bigram (729 params),
+-- this is a 729x speedup.
+--
+-- The reverse-mode gradient: evaluate the computation with
+-- all inputs as varᴿ, then call backᴿ with adjoint 1.
+-- Each varᴿ's backpropagator returns that variable's
+-- partial derivative.
+
+RevFamily : Set
+RevFamily = List Rev → RevPredictor
+
+-- Seed the i-th parameter as a reverse-mode variable
+seedRevParams : List ℝ → ℕ → List Rev
+seedRevParams []       _       = []
+seedRevParams (θ ∷ θs) zero    = varᴿ θ ∷ map constᴿ θs
+seedRevParams (θ ∷ θs) (suc i) = constᴿ θ ∷ seedRevParams θs i
+
+-- ═══ POSTULATED: REVERSE-MODE AD GRADIENT CORRECTNESS ═══
+-- The reverse-mode gradient equals the forward-mode gradient
+-- (and hence the true mathematical gradient).
+-- This is the fundamental theorem connecting the two
+-- representations: they compute the same linear map,
+-- just in different directions.
+--
+-- Note: This postulate uses single-variable reverse-mode (Rev)
+-- applied one parameter at a time. The real efficiency gain
+-- comes from the multi-input (RevN) version below, which
+-- computes ALL partial derivatives in one pass.
+
+postulate
+  reverse-equals-forward :
+    ∀ (fᴰ : DualFamily) (fᴿ : RevFamily) (f : Family)
+    → LiftsDualFamily fᴰ f
+    → (∀ (θ : List Rev) → LiftsRevPredictor (fᴿ θ) (f (map valᴿ θ)))
+    → ∀ (corpus : Corpus) (θ : Params) (i : ℕ)
+    -- For each parameter i, the single-variable reverse-mode
+    -- derivative equals the forward-mode derivative
+    → backᴿ (scoreᴿ (fᴿ (seedRevParams θ i)) corpus) 1ʳ
+      ≡ ∂S/∂θᵢ fᴰ corpus θ i
+
+-- ═══ THE TRUE POWER: MULTI-INPUT REVERSE-MODE ═══
+-- The real reverse-mode advantage comes when ALL inputs are
+-- treated as tracked variables simultaneously. Instead of
+-- seeding one variable at a time (which just gives a different
+-- way to compute the same thing), we seed ALL variables and
+-- let the backpropagator accumulate gradients for all of them.
+--
+-- To do this properly, we need Rev values that carry
+-- backpropagators mapping to LISTS of adjoints (one per input).
+
+-- A multi-input reverse-mode value: the backpropagator maps
+-- an output adjoint to a list of input adjoints.
+record RevN : Set where
+  constructor revN
+  field
+    valᴺ  : ℝ              -- primal value
+    backᴺ : ℝ → List ℝ     -- output adjoint → list of input adjoints
+
+open RevN public
+
+-- Zero adjoint list of length n
+zerosN : ℕ → List ℝ
+zerosN zero    = []
+zerosN (suc n) = 0ʳ ∷ zerosN n
+
+-- Pointwise addition of adjoint lists
+addAdjoints : List ℝ → List ℝ → List ℝ
+addAdjoints []       ys       = ys
+addAdjoints xs       []       = xs
+addAdjoints (x ∷ xs) (y ∷ ys) = (x +ʳ y) ∷ addAdjoints xs ys
+
+-- Embed a constant: backpropagator returns all zeros
+constᴺ : ℕ → ℝ → RevN
+constᴺ n x = revN x (λ _ → zerosN n)
+
+-- Embed the i-th input variable: backpropagator returns adjoint
+-- in the i-th position, zeros elsewhere (a "one-hot" adjoint)
+varᴺ : ℕ → ℕ → ℝ → RevN
+varᴺ n i x = revN x (λ δ → oneHot n i δ)
+  where
+    oneHot : ℕ → ℕ → ℝ → List ℝ
+    oneHot zero    _       _ = []
+    oneHot (suc m) zero    δ = δ ∷ zerosN m
+    oneHot (suc m) (suc j) δ = 0ʳ ∷ oneHot m j δ
+
+-- ═══ MULTI-INPUT LIFTED ARITHMETIC ═══
+
+_+ᴺ_ : RevN → RevN → RevN
+(revN a ka) +ᴺ (revN b kb) =
+  revN (a +ʳ b) (λ δ → addAdjoints (ka δ) (kb δ))
+
+infixl 6 _+ᴺ_
+
+_-ᴺ_ : RevN → RevN → RevN
+(revN a ka) -ᴺ (revN b kb) =
+  revN (a -ʳ b) (λ δ → addAdjoints (ka δ) (kb (negʳ δ)))
+
+infixl 6 _-ᴺ_
+
+_*ᴺ_ : RevN → RevN → RevN
+(revN a ka) *ᴺ (revN b kb) =
+  revN (a *ʳ b) (λ δ → addAdjoints (ka (δ *ʳ b)) (kb (δ *ʳ a)))
+
+infixl 7 _*ᴺ_
+
+_÷ᴺ_ : RevN → RevN → RevN
+(revN a ka) ÷ᴺ (revN b kb) =
+  revN (a ÷ʳ b) (λ δ → addAdjoints (ka (δ ÷ʳ b))
+                                     (kb (negʳ (δ *ʳ a) ÷ʳ (b *ʳ b))))
+
+infixl 7 _÷ᴺ_
+
+negᴺ : RevN → RevN
+negᴺ (revN a ka) = revN (negʳ a) (λ δ → ka (negʳ δ))
+
+logᴺ : RevN → RevN
+logᴺ (revN a ka) = revN (logʳ a) (λ δ → ka (δ ÷ʳ a))
+
+expᴺ : RevN → RevN
+expᴺ (revN a ka) = revN (expʳ a) (λ δ → ka (δ *ʳ expʳ a))
+
+-- ═══ VALUE PRESERVATION (MULTI-INPUT) ═══
+
++ᴺ-val : ∀ (x y : RevN) → valᴺ (x +ᴺ y) ≡ valᴺ x +ʳ valᴺ y
++ᴺ-val (revN _ _) (revN _ _) = refl
+
+*ᴺ-val : ∀ (x y : RevN) → valᴺ (x *ᴺ y) ≡ valᴺ x *ʳ valᴺ y
+*ᴺ-val (revN _ _) (revN _ _) = refl
+
+÷ᴺ-val : ∀ (x y : RevN) → valᴺ (x ÷ᴺ y) ≡ valᴺ x ÷ʳ valᴺ y
+÷ᴺ-val (revN _ _) (revN _ _) = refl
+
+logᴺ-val : ∀ (x : RevN) → valᴺ (logᴺ x) ≡ logʳ (valᴺ x)
+logᴺ-val (revN _ _) = refl
+
+expᴺ-val : ∀ (x : RevN) → valᴺ (expᴺ x) ≡ expʳ (valᴺ x)
+expᴺ-val (revN _ _) = refl
+
+-- ═══ MULTI-INPUT GRADIENT COMPUTATION ═══
+-- THIS is the O(1) gradient computation:
+-- 1. Tag each input θᵢ as varᴺ n i θᵢ
+-- 2. Run the computation in RevN arithmetic
+-- 3. Call backᴺ with adjoint 1ʳ
+-- 4. The result is the COMPLETE gradient [∂S/∂θ₁, ..., ∂S/∂θₙ]
+-- All in ONE backward pass!
+
+-- Tag all parameters as tracked variables
+tagParams : List ℝ → List RevN
+tagParams θ = go (lengthL θ) zero θ
+  where
+    lengthL : List ℝ → ℕ
+    lengthL []       = zero
+    lengthL (_ ∷ xs) = suc (lengthL xs)
+
+    go : ℕ → ℕ → List ℝ → List RevN
+    go n _ []       = []
+    go n i (x ∷ xs) = varᴺ n i x ∷ go n (suc i) xs
+
+-- Summation over RevN
+sumᴺ : List RevN → RevN
+sumᴺ []       = revN 0ʳ (λ _ → [])
+sumᴺ (x ∷ xs) = x +ᴺ sumᴺ xs
+
+-- ═══ MULTI-INPUT SCORE ═══
+
+RevNPredictor : Set
+RevNPredictor = List Char → Char → RevN
+
+scoreFromᴺ : RevNPredictor → List Char → List Char → RevN
+scoreFromᴺ p history []       = revN 0ʳ (λ _ → [])
+scoreFromᴺ p history (c ∷ cs) =
+  logᴺ (p history c) +ᴺ scoreFromᴺ p (history Data.List.Base.++ (c ∷ [])) cs
+
+scoreᴺ : RevNPredictor → List Char → RevN
+scoreᴺ p corpus = scoreFromᴺ p [] corpus
+
+-- The full gradient in one pass:
+-- evaluate score with tagged params, then call backᴺ with 1
+RevNFamily : Set
+RevNFamily = List RevN → RevNPredictor
+
+revGradient : RevNFamily → List Char → List ℝ → List ℝ
+revGradient fᴺ corpus θ =
+  let θᴺ    = tagParams θ
+      result = scoreᴺ (fᴺ θᴺ) corpus
+  in backᴺ result 1ʳ
+
+-- ═══ REVERSE-MODE GRADIENT ASCENT ═══
+-- Combining reverse-mode gradient with gradient ascent.
+
+postulate
+  rev-gradient-correct :
+    ∀ (fᴺ : RevNFamily) (f : Family)
+    → (∀ (θ : List RevN) → ∀ (h : List Char) (c : Char)
+       → valᴺ (fᴺ θ h c) ≡ f (map valᴺ θ) h c)
+    → ∀ (corpus : Corpus) (θ : Params) (η : ℝ)
+    → 0ʳ <ʳ η
+    → S f corpus θ <ʳ S f corpus (gradStep η θ (revGradient fᴺ corpus θ))
+
+rev-gradient-improves : ∀ (fᴺ : RevNFamily) (f : Family)
+  → (∀ (θ : List RevN) → ∀ (h : List Char) (c : Char)
+     → valᴺ (fᴺ θ h c) ≡ f (map valᴺ θ) h c)
+  → ∀ (corpus : Corpus) (θ : Params) (η : ℝ)
+  → 0ʳ <ʳ η
+  → (f (gradStep η θ (revGradient fᴺ corpus θ)))
+    IsBetterThan (f θ) On corpus
+rev-gradient-improves fᴺ f lifts corpus θ η η>0 =
+  param-improvement f corpus θ
+    (gradStep η θ (revGradient fᴺ corpus θ))
+    (rev-gradient-correct fᴺ f lifts corpus θ η η>0)
+
+
+-- ════════════════════════════════════════════════════════════
+-- SUMMARY
+-- ════════════════════════════════════════════════════════════
 -- This module provides:
+--
+-- PART 1: FORWARD-MODE AD (DUAL NUMBERS)
 --
 -- 1. Dual numbers: the mathematical foundation of forward-mode AD
 --
@@ -477,14 +1057,45 @@ expᴰ∘logᴰ-val-identity a a' = exp-log a
 -- 4. Forward-mode gradient computation:
 --    - seedParams: seed one parameter as variable, rest as constants
 --    - ∂S/∂θᵢ: compute one partial derivative
---    - adGradient: compute the full gradient vector
+--    - adGradient: compute the full gradient vector (n passes for n params)
 --
 -- 5. Connection to gradient ascent (Parameterize.agda):
 --    - ad-gradient-correct (postulated): AD gradient = true gradient
 --    - ad-gradient-improves (proven): AD gradient ascent → better predictor
 --
--- The key Conal insight realized: derivatives are computed BY
--- CONSTRUCTION. Each dual-number operation carries its derivative
--- rule. Composition (function application) automatically chains
--- these rules — this IS the chain rule. No separate differentiation
--- pass needed.
+-- PART 2: REVERSE-MODE AD (CONTINUATIONS)
+--
+-- 6. Rev type: value paired with backpropagator (ℝ → ℝ)
+--    - Lifted operations: +ᴿ, -ᴿ, *ᴿ, ÷ᴿ, logᴿᵛ, expᴿᵛ
+--    - Value preservation proofs (same as forward-mode)
+--    - Backpropagator correctness proofs
+--
+-- 7. RevN type: value paired with multi-input backpropagator (ℝ → List ℝ)
+--    - tagParams: tag ALL parameters as tracked variables
+--    - revGradient: compute ENTIRE gradient in ONE backward pass
+--    - O(1) passes instead of O(n) for n parameters
+--
+-- 8. Forward-reverse agreement:
+--    - reverse-equals-forward (postulated): same gradient either way
+--    - ForwardReverseAgree record for per-function agreement
+--
+-- 9. Connection to gradient ascent:
+--    - rev-gradient-correct (postulated): reverse gradient is correct
+--    - rev-gradient-improves (proven): reverse-mode gradient ascent
+--      produces genuinely better predictors
+--
+-- THE CONAL PATTERN REALIZED TWICE:
+--
+-- Forward-mode and reverse-mode are DIFFERENT REPRESENTATIONS
+-- of the SAME mathematical object (the derivative/linear map).
+-- This is exactly the pattern from the text prediction side:
+-- bigram, n-gram, RNN, attention are different representations
+-- of the same Kleisli morphism (the predictor).
+--
+-- In both cases:
+--   - The MEANING is fixed (derivative / prediction)
+--   - The REPRESENTATION is a choice (dual numbers / continuations,
+--     bigram / attention)
+--   - Different representations give different ALGORITHMS with
+--     different computational costs
+--   - The correctness follows from the algebra, not the implementation

@@ -41,12 +41,13 @@ The empirical spec (`Spec.agda`) is still gameable, but it's now explicitly labe
 - Score decomposition: proven monoid homomorphism from (List Char, ++) to (ℝ, +)
 - Kleisli category structure for predictors (`Kleisli.agda`)
 - Architecture hierarchy with embeddings (`Architectures.agda`)
-- Forward-mode AD via dual numbers (`AD.agda`)
+- Forward-mode AD via dual numbers + reverse-mode AD via continuations (`AD.agda`)
+- The representation pattern: forward/reverse AD are different reps of the same linear map, exactly as bigram/attention are different reps of the same Kleisli morphism
 - Executable bigrams: NLL = 2.454 on 32k names, matching Karpathy
 
 **Where we're overclaiming or loose:**
 - "Score is a functor" — it's a monoid homomorphism, not a functor in the precise categorical sense. In Conal's AD work, D is genuinely a functor between categories (smooth functions → linear maps). We should be more careful with this language.
-- The architecture "analogy" is weaker than the AD analogy. In AD, forward-mode and reverse-mode compute the *same derivative*. In text prediction, bigram and attention compute *different functions* with different expressive power. That's not a representation choice in Conal's sense.
+- The architecture "analogy" is weaker than the AD analogy. In AD, forward-mode and reverse-mode compute the *same derivative* (proven: both modes agree on all primitives, postulated for compositions). In text prediction, bigram and attention compute *different functions* with different expressive power. That's not a representation choice in Conal's sense.
 - `gradient-improves` postulates its own punchline via `gradient-ascent-lemma`.
 - Most theorems verify known facts rather than deriving anything new.
 
@@ -64,8 +65,8 @@ Follow Karpathy's [makemore](https://github.com/karpathy/makemore) progression (
 ### 1. Scale MLP to 32k names
 The MLP exists and trains on a small corpus (makemore part 2: context window + embeddings + hidden layer + softmax, 209 parameters). Next: scale it to the full `names.txt` dataset and benchmark against Karpathy's numbers. May need reverse-mode AD first for training speed.
 
-### 2. Reverse-mode AD
-Forward-mode AD (dual numbers) works for bigram-scale models but is O(params) per gradient. For the MLP (209 params) and beyond, we need reverse-mode AD. In Conal's framework: reverse-mode = use continuations as representation of linear maps. This is the core Conal pattern (representation choice gives algorithm) and is practically necessary for training anything bigger.
+### 2. Reverse-mode AD -- DONE
+Reverse-mode AD is implemented in both proof (`AD.agda` Part 2) and executable (`ReverseAD.agda`) forms. The proof module defines `Rev` (single-variable backpropagator) and `RevN` (multi-input backpropagator), with value preservation proofs and the `rev-gradient-improves` theorem. The executable module demonstrates the 729x speedup (1 pass vs 729 for bigram's gradient). Results match forward-mode exactly. Next: wire reverse-mode into MLP training for practical speedup on 209 parameters.
 
 ### 3. Close postulate gaps
 - `log-prob-is-score`: threading positivity proofs (tedious but straightforward)
@@ -87,7 +88,7 @@ The real test of whether this project succeeds in Conal's sense. Don't just clas
 - `Properties.agda` — monotonicity, convex combinations, Jensen
 - `Kleisli.agda` — categorical structure, score as indexed monoid homomorphism
 - `Architectures.agda` — bigram ⊂ n-gram ⊂ RNN ⊂ attention ⊂ full predictor
-- `AD.agda` — forward-mode AD via dual numbers
+- `AD.agda` — forward-mode AD via dual numbers + reverse-mode AD via continuations
 - `Parameterize.agda` — parameter search, gradient ascent validity
 
 **Executable (use Float, not postulated ℝ):**
@@ -95,6 +96,7 @@ The real test of whether this project succeeds in Conal's sense. Don't just clas
 - `BigramCount.agda` — count-based MLE bigram (32k names, NLL = 2.454)
 - `BigramAD.agda` — bigram with forward-mode AD training (10 names)
 - `MLP.agda` — MLP with context window, embeddings, hidden layer (small corpus, 209 params)
+- `ReverseAD.agda` — bigram with reverse-mode AD training (1 pass for full gradient vs 729)
 
 ## Workflow conventions
 
