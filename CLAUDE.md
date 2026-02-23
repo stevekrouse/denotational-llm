@@ -61,12 +61,11 @@ Follow Karpathy's [makemore](https://github.com/karpathy/makemore) progression (
 
 ## Next steps
 
-### 1. Executable MLP (makemore part 2)
-Fixed context window (e.g. 3 chars), character embeddings, hidden layer with tanh, softmax output. In our framework it's an n-gram architecture (from `Architectures.agda`) with learned embeddings. Needs gradient-based training.
+### 1. Scale MLP to 32k names
+The MLP exists and trains on a small corpus (makemore part 2: context window + embeddings + hidden layer + softmax, 209 parameters). Next: scale it to the full `names.txt` dataset and benchmark against Karpathy's numbers. May need reverse-mode AD first for training speed.
 
-### 2. Connect AD to training
-- `Bigram.agda` uses numerical perturbation (slow, approximate). Wire `AD.agda`'s dual numbers to get exact forward-mode gradients.
-- Then reverse-mode AD (continuations = Conal's key AD insight) for training anything with >100 parameters.
+### 2. Reverse-mode AD
+Forward-mode AD (dual numbers) works for bigram-scale models but is O(params) per gradient. For the MLP (209 params) and beyond, we need reverse-mode AD. In Conal's framework: reverse-mode = use continuations as representation of linear maps. This is the core Conal pattern (representation choice gives algorithm) and is practically necessary for training anything bigger.
 
 ### 3. Close postulate gaps
 - `log-prob-is-score`: threading positivity proofs (tedious but straightforward)
@@ -94,6 +93,8 @@ The real test of whether this project succeeds in Conal's sense. Don't just clas
 **Executable (use Float, not postulated ℝ):**
 - `Bigram.agda` — small gradient-descent bigram (10 names)
 - `BigramCount.agda` — count-based MLE bigram (32k names, NLL = 2.454)
+- `BigramAD.agda` — bigram with forward-mode AD training (10 names)
+- `MLP.agda` — MLP with context window, embeddings, hidden layer (small corpus, 209 params)
 
 ## Conventions
 

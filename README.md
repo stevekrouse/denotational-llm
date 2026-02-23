@@ -17,7 +17,7 @@ Following Conal's [methodology](http://conal.net/papers/type-class-morphisms/): 
 
 ## Status
 
-**What's working:** Two-layer specification (true score over distributions + empirical score on corpora), score decomposition, Kleisli category structure, architecture hierarchy, forward-mode AD, parameterized improvement, and executable bigrams matching Karpathy's NLL = 2.454 on 32k names.
+**What's working:** Two-layer specification (true score over distributions + empirical score on corpora), score decomposition, Kleisli category structure, architecture hierarchy, forward-mode AD, parameterized improvement, executable bigrams matching Karpathy's NLL = 2.454 on 32k names, AD-trained bigram with exact dual-number gradients, and an executable MLP (context window + embeddings + hidden layer + softmax).
 
 **What's honest:** Most of this verifies known things rather than deriving new ones. Score decomposition is "log of a product = sum of logs." The architecture classification explains *why* existing architectures work, but unlike Conal's AD work — where reverse-mode via continuations was a genuine surprise — we haven't yet derived anything from the algebra that nobody knew. That's the goal.
 
@@ -25,9 +25,9 @@ Following Conal's [methodology](http://conal.net/papers/type-class-morphisms/): 
 
 ## Next steps
 
-1. **Executable MLP** — Karpathy's makemore part 2: fixed context window, character embeddings, hidden layer
-4. **Wire AD into training** — replace numerical perturbation with exact forward-mode gradients; then reverse-mode AD for larger models
-5. **Derive something new** — find a representation of `List Char → Char → ℝ` that the algebra *forces*, or an optimization insight that falls out of the spec
+1. **Scale MLP to 32k names** — the MLP currently trains on a small corpus; scale it to the full `names.txt` dataset to benchmark against Karpathy's makemore part 2 numbers
+2. **Reverse-mode AD** — forward-mode AD works but is O(params) per gradient; reverse-mode (continuations as representation of linear maps — Conal's key AD insight) is needed for models with hundreds of parameters
+3. **Derive something new** — find a representation of `List Char → Char → ℝ` that the algebra *forces*, or an optimization insight that falls out of the spec
 
 ## Module dependencies
 
@@ -48,6 +48,8 @@ graph TD
     P --> TS
     Pa -.-> B[Bigram.agda]
     Pa -.-> BC[BigramCount.agda]
+    Pa -.-> BAD[BigramAD.agda]
+    Pa -.-> MLP[MLP.agda]
 ```
 
 Solid arrows are `open import` dependencies. Dotted arrows indicate that the executable modules follow the structure proven in the spec modules but use `Float` instead of postulated `ℝ`.
@@ -67,6 +69,8 @@ Solid arrows are `open import` dependencies. Dotted arrows indicate that the exe
 | `Parameterize.agda` | Parameter families, gradient ascent validity |
 | `Bigram.agda` | Executable bigram trained by numerical gradient descent (10 names) |
 | `BigramCount.agda` | Executable count-based bigram via MLE (32k names, matches Karpathy's NLL = 2.454) |
+| `BigramAD.agda` | Executable bigram trained with forward-mode AD dual numbers (exact gradients) |
+| `MLP.agda` | Executable MLP: context window + embeddings + hidden layer + softmax (makemore part 2) |
 | `names.txt` | 32,032 names dataset from [Karpathy's makemore](https://github.com/karpathy/makemore) |
 
 ## Proven theorems
@@ -121,6 +125,12 @@ agda --compile Bigram.agda && ./Bigram
 
 # Compile and run the count-based bigram (MLE on 32k names)
 agda --compile BigramCount.agda && ./BigramCount
+
+# Compile and run the AD-trained bigram (forward-mode dual numbers)
+agda --compile BigramAD.agda && ./BigramAD
+
+# Compile and run the MLP (context window + embeddings + hidden layer)
+agda --compile MLP.agda && ./MLP
 ```
 
 ## References
