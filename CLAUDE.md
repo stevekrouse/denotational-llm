@@ -99,10 +99,12 @@ The real test of whether this project succeeds in Conal's sense. Don't just clas
 ## Workflow conventions
 
 **Top-level agent = coordinator.** The top-level Claude agent should NOT do heavy work (writing Agda, long compilations, research). Instead it:
-- Dispatches work to subagents
+- Dispatches work to subagents immediately — never wait for user direction
+- Always has subagents running, pushing toward the top-level goal
 - Monitors progress and stops agents that go off-track
 - Reports status to the human
 - Stays free to respond to the human at any time
+- When a subagent finishes, immediately launch the next piece of work
 
 **Fast feedback loops.** Default to low timeouts (30s–60s for compilation, 120s max). Take many small steps rather than one long blocking operation. Only increase timeouts incrementally when absolutely necessary.
 
