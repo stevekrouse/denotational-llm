@@ -4,6 +4,22 @@
 
 An Agda formalization of text prediction following Conal Elliott's denotational design methodology. The central analogy: just as derivatives form a functor from smooth functions to linear maps, score forms an indexed homomorphism from predictors (Kleisli morphisms) to (ℝ, +). Different representations of the morphism yield different architectures.
 
+## Goals
+
+The dream: derive a text prediction system from pure algebraic specification the way Conal derived AD — where new algorithms *fall out* of the algebra rather than being layered on top.
+
+**Accomplished so far:**
+- Full specification of what "better predictor" means (log-likelihood score)
+- Kleisli category structure with score as indexed functor (the core insight)
+- Architecture hierarchy (bigram ⊂ n-gram ⊂ RNN ⊂ attention) as representation choices
+- Proof that gradient ascent on any parameterized family is valid
+- Executable bigrams matching Karpathy's makemore numbers
+
+**The open frontier:**
+- We have an elegant explanation of *why* existing architectures work, but haven't yet derived a *novel* architecture from the algebra. In Conal's AD work, reverse-mode via continuations was a genuine surprise — the algebra revealed something new. We want the same: a representation of the Kleisli morphism that nobody has tried, or an optimization strategy suggested by the algebraic structure.
+- Beating Karpathy's performance with a more elegant, provably-correct representation would be the real win.
+- The analogy is strong for optimization (score decomposition = chain rule) but has an honest gap for architecture choice: in AD, different reps of linear maps compute the *same* derivative; in text prediction, different reps of predictors have genuinely *different* expressive power.
+
 ## Module structure
 
 **Foundation:** `Real.agda` → `Probability.agda` → `Spec.agda`

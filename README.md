@@ -1,8 +1,31 @@
 # Denotational LLM
 
-An Agda formalization of text prediction, following [Conal Elliott's methodology](http://conal.net/papers/compiling-to-categories/): start with a mathematical specification, identify the algebraic structure, and derive implementations that are correct by construction.
+Conal Elliott [showed](http://conal.net/papers/essence-of-ad/) that if you start with the mathematical specification of differentiation and work out the algebra, AD algorithms *fall out* — reverse-mode AD is just "use continuations as your representation of linear maps." The algebra revealed why it works and suggested new variations.
 
-The specification says what it means for one predictor to be better than another (higher log-likelihood). Score decomposition over corpus concatenation gives us a "chain rule" analog. Different representations of the predictor type yield different architectures (bigram, RNN, attention), each inheriting all proven properties automatically.
+**Can we do the same thing for text prediction?** Start with a precise specification of "getting better at predicting the next character," find the algebraic structure, and see what falls out?
+
+This repo is that attempt, formalized in Agda.
+
+## The analogy
+
+| AD (Elliott 2018) | Text Prediction (this repo) |
+|---|---|
+| Differentiable function f : A → B | Predictor p : History → Dist(Char) |
+| Smooth functions form a **category** | Predictors form a **Kleisli category** |
+| Derivative is a **functor** to linear maps | Score is a **functor** to (ℝ, +) |
+| Chain rule: D(f∘g) = D(f)∘D(g) | Score decomposition: score(xs++ys) = score(xs) + score(h++xs, ys) |
+| Reps of linear maps → AD algorithms | Reps of Kleisli morphisms → architectures |
+| Forward-mode, reverse-mode, etc. | Bigram, RNN, Attention, etc. |
+
+The "chain rule" analog is score decomposition: score additively splits over corpus concatenation, with the history shifting — exactly like how AD's chain rule evaluates D(f) at g(x), not at x.
+
+## Status
+
+We've built the algebraic framework and proven the key structural theorems. Different representations of the Kleisli morphism `List Char → Char → ℝ` yield different architectures (bigram, n-gram, RNN, attention), each correct by construction. Gradient ascent on any parameterized family is a valid improvement strategy, derived from the specification.
+
+**What's working:** The specification, categorical structure, architecture hierarchy, AD, parameterized improvement, and executable bigrams that match [Karpathy's makemore](https://github.com/karpathy/makemore) numbers.
+
+**The open question:** In Conal's work, new algorithms genuinely *fell out* of the algebra — reverse-mode AD via continuations was a surprise. We haven't gotten there yet for text prediction. We have an elegant unified explanation of *why* existing architectures work, but we haven't yet derived a novel architecture or optimization that nobody knew about. That's the goal — uncovering new representations of the Kleisli morphism that are interesting architectures, or new optimization strategies suggested by the algebraic structure.
 
 ## Module dependencies
 
@@ -90,6 +113,6 @@ agda --compile BigramCount.agda && ./BigramCount
 
 ## References
 
-- Conal Elliott, [*The Simple Essence of Automatic Differentiation*](http://conal.net/papers/essence-of-ad/) (2018) — the methodological template
-- Conal Elliott, [*Compiling to Categories*](http://conal.net/papers/compiling-to-categories/) (2017)
-- Andrej Karpathy, [makemore](https://github.com/karpathy/makemore) — the character-level language model series this formalizes
+- Conal Elliott, [*The Simple Essence of Automatic Differentiation*](http://conal.net/papers/essence-of-ad/) (2018) — the methodological template: differentiation as a functor, representations of linear maps give AD algorithms
+- Conal Elliott, [*Compiling to Categories*](http://conal.net/papers/compiling-to-categories/) (2017) — the general methodology: define meaning, require homomorphism, solve for implementation
+- Andrej Karpathy, [makemore](https://github.com/karpathy/makemore) — the character-level language model series; our bigrams match his performance numbers
