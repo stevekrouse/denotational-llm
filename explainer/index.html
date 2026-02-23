@@ -532,6 +532,7 @@ footer a { color: var(--teal); }
   .embed-viz { flex-direction: column; }
   .split-eq { grid-template-columns: 1fr; gap: 0.3rem; }
   .split-op { font-size: 1rem; }
+  #sec-ad-parallel .interactive > div:first-of-type { grid-template-columns: 1fr !important; }
 }
 </style>
 </head>
@@ -693,6 +694,115 @@ footer a { color: var(--teal); }
 </section>
 
 <!-- ============================================================
+     SECTION A: THE UNIVERSAL PROPERTY (deep-math insert)
+     ============================================================ -->
+<section id="sec-universal">
+  <h2 style="color: var(--teal);">Deep Dive: Why This Summary? The Universal Property</h2>
+  <p>
+    We said the summary is a matrix from the "truncated tensor algebra T<sub>2</sub>."
+    But why <em>this</em> particular structure? Why not some other kind of summary?
+  </p>
+  <p>
+    The answer is a beautiful result from algebra called the <strong>universal property
+    of the tensor algebra</strong>. In plain language: the tensor algebra T(V) is the
+    <em>most general</em> way to combine vectors using multiplication and addition.
+    Any other algebraic combination you could invent &mdash; polynomials, correlations,
+    cumulants &mdash; is a <em>simplification</em> of the tensor algebra. It is the
+    freest algebraic structure that respects our monoid constraint.
+  </p>
+  <p>
+    But T(V) is infinite. We cannot store an infinite summary. So we <strong>truncate</strong>:
+    keep only products up to some order <em>k</em>. Each level adds a qualitatively new
+    kind of information:
+  </p>
+
+  <div class="interactive" style="padding: 1.2rem 1.5rem;">
+    <div class="interactive-label">The truncation hierarchy</div>
+    <div style="font-family: var(--font-sans); font-size: 0.88rem; line-height: 1.8;">
+
+      <!-- T0 -->
+      <div style="display: flex; align-items: baseline; gap: 0.8rem; padding: 0.7rem 0; border-bottom: 1px solid var(--border);">
+        <div style="min-width: 2.5rem; font-weight: 700; color: var(--teal);">T<sub>0</sub></div>
+        <div style="flex: 1;">
+          <strong>Just counting.</strong> One number: how many letters you have seen.
+          <br><span style="color: var(--text-light);">Dimension: <strong>1</strong></span>
+          <br><span style="color: var(--text-light); font-style: italic;">"How many letters?"</span>
+        </div>
+      </div>
+
+      <!-- T1 -->
+      <div style="display: flex; align-items: baseline; gap: 0.8rem; padding: 0.7rem 0; border-bottom: 1px solid var(--border);">
+        <div style="min-width: 2.5rem; font-weight: 700; color: var(--teal);">T<sub>1</sub></div>
+        <div style="flex: 1;">
+          <strong>Counting + averages.</strong> A count plus a running sum of embeddings.
+          <br><span style="color: var(--text-light);">Dimension: <strong>1 + d</strong></span>
+          <br><span style="color: var(--text-light); font-style: italic;">"What letters appear?"</span>
+        </div>
+      </div>
+
+      <!-- T2 -->
+      <div style="display: flex; align-items: baseline; gap: 0.8rem; padding: 0.7rem 0; border-bottom: 1px solid var(--border); background: rgba(224,122,95,0.06); margin: 0 -1.5rem; padding-left: 1.5rem; padding-right: 1.5rem;">
+        <div style="min-width: 2.5rem; font-weight: 700; color: var(--accent);">T<sub>2</sub></div>
+        <div style="flex: 1;">
+          <strong>Counting + averages + pair correlations.</strong> Everything above, plus a matrix
+          recording which embeddings appeared together.
+          <br><span style="color: var(--text-light);">Dimension: <strong>1 + d + d<sup>2</sup></strong></span>
+          <br><span style="color: var(--text-light); font-style: italic;">"Which letters follow which?"</span>
+        </div>
+      </div>
+
+      <!-- T3 -->
+      <div style="display: flex; align-items: baseline; gap: 0.8rem; padding: 0.7rem 0;">
+        <div style="min-width: 2.5rem; font-weight: 700; color: var(--text-light);">T<sub>3</sub></div>
+        <div style="flex: 1;">
+          <strong>All of the above + triple correlations.</strong> A rank-3 tensor of three-letter patterns.
+          <br><span style="color: var(--text-light);">Dimension: <strong>1 + d + d<sup>2</sup> + d<sup>3</sup></strong></span>
+          <br><span style="color: #999; font-style: italic;">"Three-letter patterns" &mdash; too expensive!</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <p>
+    For the embedding dimension <em>d</em> = 16 that we use in practice, the numbers
+    become vivid:
+  </p>
+
+  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; margin: 1.2rem 0;">
+    <div style="text-align: center; padding: 0.8rem 1rem; border-radius: 8px; border: 1px solid var(--border); font-family: var(--font-sans); font-size: 0.82rem; min-width: 100px;">
+      <div style="font-size: 1.4rem; font-weight: 700; color: var(--teal);">1</div>
+      <div style="color: var(--text-light);">T<sub>0</sub></div>
+    </div>
+    <div style="text-align: center; padding: 0.8rem 1rem; border-radius: 8px; border: 1px solid var(--border); font-family: var(--font-sans); font-size: 0.82rem; min-width: 100px;">
+      <div style="font-size: 1.4rem; font-weight: 700; color: var(--teal);">17</div>
+      <div style="color: var(--text-light);">T<sub>1</sub></div>
+    </div>
+    <div style="text-align: center; padding: 0.8rem 1rem; border-radius: 8px; border: 2px solid var(--accent); font-family: var(--font-sans); font-size: 0.82rem; min-width: 100px; background: rgba(224,122,95,0.06);">
+      <div style="font-size: 1.4rem; font-weight: 700; color: var(--accent);">273</div>
+      <div style="color: var(--text-light);">T<sub>2</sub> &larr; sweet spot</div>
+    </div>
+    <div style="text-align: center; padding: 0.8rem 1rem; border-radius: 8px; border: 1px solid var(--border); font-family: var(--font-sans); font-size: 0.82rem; min-width: 100px; opacity: 0.5;">
+      <div style="font-size: 1.4rem; font-weight: 700; color: var(--text-light);">4,369</div>
+      <div style="color: var(--text-light);">T<sub>3</sub></div>
+    </div>
+  </div>
+
+  <p>
+    Going from T<sub>1</sub> to T<sub>2</sub> adds 256 numbers and gives us pair correlations
+    &mdash; enough to predict which letters follow which. Going from T<sub>2</sub> to T<sub>3</sub>
+    adds <em>4,096</em> more numbers for triple correlations, a 16x blowup for diminishing returns.
+  </p>
+
+  <p style="font-size: 1.05rem; border-left: 3px solid var(--accent); padding: 0.8rem 1.2rem; margin: 1.5rem 0; background: rgba(224,122,95,0.04);">
+    <strong>T<sub>2</sub> is not a design choice.</strong> It is the answer to the question:
+    <em>what is the most you can remember about letter pairs in a fixed-size notebook?</em>
+    The universal property guarantees that no other algebraic summary of the same size
+    captures more information &mdash; anything else is a quotient of this.
+  </p>
+</section>
+
+<!-- ============================================================
      SECTION 4: ATTENTION HEADS
      ============================================================ -->
 <section id="sec-heads">
@@ -735,6 +845,262 @@ footer a { color: var(--teal); }
     We asked "how do you read a matrix?" and the algebra forced the answer: via a
     sum of rank-1 queries. Each rank-1 query IS an attention head. The number of
     heads is the only free parameter.
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION B: THE RANK DECOMPOSITION (deep-math insert)
+     ============================================================ -->
+<section id="sec-rank">
+  <h2 style="color: var(--teal);">Deep Dive: Why Heads? The Rank Decomposition</h2>
+  <p>
+    The summary is a matrix <strong>M</strong>. To predict the next letter, we need to
+    extract a number from this matrix &mdash; a <em>linear functional</em>, which we can
+    write as tr(<strong>W</strong><sup>T</sup> &middot; <strong>M</strong>) for some
+    weight matrix <strong>W</strong>. The question is: how should we structure <strong>W</strong>?
+  </p>
+
+  <p>
+    Any matrix can be written as a sum of "simple" matrices, each formed by the
+    <strong>outer product</strong> of two vectors. This is the
+    <em>rank decomposition</em> (or SVD):
+  </p>
+
+  <div class="interactive" style="padding: 1.5rem;">
+    <div class="interactive-label">A matrix as a sum of outer products</div>
+
+    <!-- Visual: W = sum of rank-1 matrices -->
+    <div style="display: flex; align-items: center; justify-content: center; gap: 0.6rem; flex-wrap: wrap; margin: 1rem 0;">
+      <!-- W matrix -->
+      <div style="text-align: center;">
+        <svg width="80" height="80" viewBox="0 0 80 80">
+          <rect x="2" y="2" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.9"/>
+          <rect x="22" y="2" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.5"/>
+          <rect x="42" y="2" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.3"/>
+          <rect x="62" y="2" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.6"/>
+          <rect x="2" y="22" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.4"/>
+          <rect x="22" y="22" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.8"/>
+          <rect x="42" y="22" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.2"/>
+          <rect x="62" y="22" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.5"/>
+          <rect x="2" y="42" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.5"/>
+          <rect x="22" y="42" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.3"/>
+          <rect x="42" y="42" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.7"/>
+          <rect x="62" y="42" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.4"/>
+          <rect x="2" y="62" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.7"/>
+          <rect x="22" y="62" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.4"/>
+          <rect x="42" y="62" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.6"/>
+          <rect x="62" y="62" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.9"/>
+        </svg>
+        <div style="font-family: var(--font-sans); font-size: 0.78rem; color: var(--text-light); margin-top: 0.3rem;"><strong>W</strong></div>
+      </div>
+
+      <div style="font-size: 1.5rem; color: var(--text-light);">=</div>
+
+      <!-- Rank-1 term 1 -->
+      <div style="text-align: center;">
+        <svg width="80" height="80" viewBox="0 0 80 80">
+          <rect x="2" y="2" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.9"/>
+          <rect x="22" y="2" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.6"/>
+          <rect x="42" y="2" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.3"/>
+          <rect x="62" y="2" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.1"/>
+          <rect x="2" y="22" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.6"/>
+          <rect x="22" y="22" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.4"/>
+          <rect x="42" y="22" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.2"/>
+          <rect x="62" y="22" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.05"/>
+          <rect x="2" y="42" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.3"/>
+          <rect x="22" y="42" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.2"/>
+          <rect x="42" y="42" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.1"/>
+          <rect x="62" y="42" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.03"/>
+          <rect x="2" y="62" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.1"/>
+          <rect x="22" y="62" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.05"/>
+          <rect x="42" y="62" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.03"/>
+          <rect x="62" y="62" width="18" height="18" rx="2" fill="#e07a5f" opacity="0.01"/>
+        </svg>
+        <div style="font-family: var(--font-sans); font-size: 0.72rem; color: var(--accent); margin-top: 0.3rem;">
+          <strong>v</strong><sub>1</sub> <strong>q</strong><sub>1</sub><sup>T</sup>
+        </div>
+      </div>
+
+      <div style="font-size: 1.5rem; color: var(--text-light);">+</div>
+
+      <!-- Rank-1 term 2 -->
+      <div style="text-align: center;">
+        <svg width="80" height="80" viewBox="0 0 80 80">
+          <rect x="2" y="2" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.1"/>
+          <rect x="22" y="2" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.2"/>
+          <rect x="42" y="2" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.3"/>
+          <rect x="62" y="2" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.5"/>
+          <rect x="2" y="22" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.2"/>
+          <rect x="22" y="22" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.4"/>
+          <rect x="42" y="22" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.6"/>
+          <rect x="62" y="22" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.9"/>
+          <rect x="2" y="42" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.05"/>
+          <rect x="22" y="42" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.1"/>
+          <rect x="42" y="42" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.2"/>
+          <rect x="62" y="42" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.3"/>
+          <rect x="2" y="62" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.3"/>
+          <rect x="22" y="62" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.5"/>
+          <rect x="42" y="62" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.7"/>
+          <rect x="62" y="62" width="18" height="18" rx="2" fill="#3d5a80" opacity="0.9"/>
+        </svg>
+        <div style="font-family: var(--font-sans); font-size: 0.72rem; color: var(--teal); margin-top: 0.3rem;">
+          <strong>v</strong><sub>2</sub> <strong>q</strong><sub>2</sub><sup>T</sup>
+        </div>
+      </div>
+
+      <div style="font-size: 1.5rem; color: var(--text-light);">+ &middot;&middot;&middot;</div>
+    </div>
+
+    <p style="font-family: var(--font-sans); font-size: 0.88rem; margin-top: 1rem; margin-bottom: 0.8rem;">
+      Each colored matrix above is a <strong>rank-1</strong> piece: the outer product of a
+      "value" vector <strong>v</strong> and a "query" vector <strong>q</strong>. Now apply
+      this decomposition to the readout formula:
+    </p>
+
+    <div style="text-align: center; padding: 1rem; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); margin: 1rem 0;">
+      <div style="font-family: var(--font-sans); font-size: 0.95rem;">
+        <span style="color: var(--text-light);">readout =</span>
+        <span style="color: var(--text);">tr(<strong>W</strong><sup>T</sup> &middot; <strong>M</strong>)</span>
+        <span style="color: var(--text-light);"> = </span>
+        <span style="color: var(--accent); font-weight: 600;">&Sigma;<sub>h</sub></span>
+        <span style="color: var(--accent);"> <strong>v</strong><sub>h</sub><sup>T</sup></span>
+        <span style="color: var(--text);"> &middot; <strong>M</strong> &middot; </span>
+        <span style="color: var(--teal);"><strong>q</strong><sub>h</sub></span>
+      </div>
+      <div style="font-family: var(--font-sans); font-size: 0.78rem; color: var(--text-light); margin-top: 0.5rem;">
+        Each term in the sum is one attention head: query <strong style="color:var(--teal);">q</strong>
+        retrieves from matrix <strong>M</strong>, projected by value <strong style="color:var(--accent);">v</strong>.
+      </div>
+    </div>
+
+    <p style="font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-light); margin-bottom: 0.5rem;">
+      The rank <em>H</em> of the decomposition is a free parameter. More heads = more
+      faithful approximation of the full readout, but more parameters. Here is what happens
+      in practice:
+    </p>
+
+    <!-- Bar chart of experimental results -->
+    <div style="margin: 1rem 0;">
+      <svg id="rankNLLChart" viewBox="0 0 600 220" width="100%" style="overflow: visible;">
+        <!-- Y axis -->
+        <line x1="80" y1="20" x2="80" y2="180" stroke="var(--border)" stroke-width="1"/>
+        <!-- Bars -->
+        <!-- H=1: NLL=2.269 -->
+        <rect x="100" y="42" width="60" height="132" rx="4" fill="var(--accent)" opacity="0.6"/>
+        <text x="130" y="195" text-anchor="middle" font-size="11" font-family="var(--font-sans)" fill="var(--text)">H=1</text>
+        <text x="130" y="37" text-anchor="middle" font-size="11" font-family="var(--font-sans)" fill="var(--accent)" font-weight="600">2.269</text>
+        <!-- H=2: NLL=2.268 -->
+        <rect x="180" y="41" width="60" height="133" rx="4" fill="var(--accent)" opacity="0.65"/>
+        <text x="210" y="195" text-anchor="middle" font-size="11" font-family="var(--font-sans)" fill="var(--text)">H=2</text>
+        <text x="210" y="36" text-anchor="middle" font-size="11" font-family="var(--font-sans)" fill="var(--accent)" font-weight="600">2.268</text>
+        <!-- H=4: NLL=2.258 -->
+        <rect x="260" y="31" width="60" height="143" rx="4" fill="var(--accent)" opacity="0.75"/>
+        <text x="290" y="195" text-anchor="middle" font-size="11" font-family="var(--font-sans)" fill="var(--text)">H=4</text>
+        <text x="290" y="26" text-anchor="middle" font-size="11" font-family="var(--font-sans)" fill="var(--accent)" font-weight="600">2.258</text>
+        <!-- H=8: NLL=2.252 -->
+        <rect x="340" y="25" width="60" height="149" rx="4" fill="var(--accent)" opacity="0.85"/>
+        <text x="370" y="195" text-anchor="middle" font-size="11" font-family="var(--font-sans)" fill="var(--text)">H=8</text>
+        <text x="370" y="20" text-anchor="middle" font-size="11" font-family="var(--font-sans)" fill="var(--accent)" font-weight="600">2.252</text>
+        <!-- H=4+ELU: NLL=2.250 -->
+        <rect x="420" y="23" width="60" height="151" rx="4" fill="var(--teal)" opacity="0.85"/>
+        <text x="450" y="195" text-anchor="middle" font-size="10" font-family="var(--font-sans)" fill="var(--text)">H=4+ELU</text>
+        <text x="450" y="18" text-anchor="middle" font-size="11" font-family="var(--font-sans)" fill="var(--teal)" font-weight="700">2.250</text>
+        <!-- Axis labels -->
+        <text x="40" y="105" text-anchor="middle" font-size="11" font-family="var(--font-sans)" fill="var(--text-light)" transform="rotate(-90, 40, 105)">NLL (lower = better)</text>
+        <text x="300" y="215" text-anchor="middle" font-size="11" font-family="var(--font-sans)" fill="var(--text-light)">Number of attention heads (rank of decomposition)</text>
+      </svg>
+    </div>
+  </div>
+
+  <p>
+    The progression is clear: each additional head improves prediction, with diminishing
+    returns. The optimal point for this dataset is around 4 heads with a positive feature
+    map (ELU), which bridges toward softmax attention. This is not a hyperparameter we
+    tuned &mdash; the <em>algebra</em> tells us what the knob means and why turning it
+    helps.
+  </p>
+</section>
+
+<!-- ============================================================
+     SECTION C: THE AD PARALLEL (deep-math insert)
+     ============================================================ -->
+<section id="sec-ad-parallel">
+  <h2 style="color: var(--teal);">Deep Dive: The Same Trick Twice</h2>
+  <p>
+    The decomposition of attention into heads is not a new kind of idea. It is the
+    <em>same mathematical move</em> that Conal Elliott identified in automatic
+    differentiation. Here they are, side by side:
+  </p>
+
+  <div class="interactive" style="padding: 1.2rem 1.5rem;">
+    <div class="interactive-label">Two decompositions, one pattern</div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 0.5rem 0 1.2rem;">
+      <!-- LEFT: AD -->
+      <div style="padding: 1.2rem; border-radius: 8px; border: 1px solid var(--teal); background: rgba(61,90,128,0.04);">
+        <div style="font-family: var(--font-sans); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--teal); font-weight: 600; margin-bottom: 0.8rem;">
+          In calculus...
+        </div>
+        <p style="font-size: 0.88rem; margin-bottom: 0.6rem;">
+          The <strong>derivative</strong> of a function at a point is a <em>linear map</em>.
+        </p>
+        <p style="font-size: 0.88rem; margin-bottom: 0.6rem;">
+          A linear map can be represented as a <em>matrix</em>.
+        </p>
+        <p style="font-size: 0.88rem; margin-bottom: 0.6rem;">
+          You can read that matrix <strong>column by column</strong>
+          (forward mode &mdash; cheap when inputs are few) or
+          <strong>row by row</strong>
+          (reverse mode &mdash; cheap when outputs are few).
+        </p>
+        <p style="font-size: 0.88rem; margin-bottom: 0;">
+          <span style="color: var(--teal); font-weight: 600;">Same derivative</span>,
+          different decomposition.
+        </p>
+      </div>
+
+      <!-- RIGHT: Prediction -->
+      <div style="padding: 1.2rem; border-radius: 8px; border: 1px solid var(--accent); background: rgba(224,122,95,0.04);">
+        <div style="font-family: var(--font-sans); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); font-weight: 600; margin-bottom: 0.8rem;">
+          In prediction...
+        </div>
+        <p style="font-size: 0.88rem; margin-bottom: 0.6rem;">
+          The <strong>readout</strong> of an accumulated matrix is a <em>linear functional</em>.
+        </p>
+        <p style="font-size: 0.88rem; margin-bottom: 0.6rem;">
+          A linear functional on matrices is a sum of <em>rank-1 terms</em>.
+        </p>
+        <p style="font-size: 0.88rem; margin-bottom: 0.6rem;">
+          You can use <strong>all D terms</strong>
+          (full T<sub>2</sub> readout &mdash; expensive but exact) or
+          <strong>H &lt; D terms</strong>
+          (multi-head &mdash; cheap and nearly as good).
+        </p>
+        <p style="font-size: 0.88rem; margin-bottom: 0;">
+          <span style="color: var(--accent); font-weight: 600;">Same readout</span>,
+          different decomposition.
+        </p>
+      </div>
+    </div>
+
+    <!-- Bottom row: unifying message -->
+    <div style="padding: 1rem 1.2rem; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); text-align: center;">
+      <p style="font-family: var(--font-sans); font-size: 0.92rem; margin: 0; line-height: 1.6;">
+        Both are the same mathematical move: take a <strong>linear object</strong>,
+        decompose it into pieces, and choose <strong>how many pieces to keep</strong>
+        based on your computational budget. In AD the parameter is
+        <em>dimension</em> (forward vs. reverse). Here it is
+        <em>rank</em> (number of heads).
+      </p>
+    </div>
+  </div>
+
+  <div class="aside">
+    <strong>Why this matters.</strong> Conal Elliott showed that the "choice" between
+    forward-mode and reverse-mode AD is not a software engineering decision &mdash; it is
+    a mathematical fact about how to represent linear maps. We are making the same argument
+    about attention heads: they are not a neural network design choice, but a mathematical
+    fact about how to read from a matrix.
   </div>
 </section>
 

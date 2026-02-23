@@ -1,15 +1,24 @@
 _build/
 .claude/
 MAlonzo/
+
+# Agda interface files
+*.agdai
+
+# Haskell compilation artifacts
+*.hi
+*.o
+
+# Compiled Agda/Haskell binaries (no extension)
 Bigram
 BigramAD
 BigramCount
-ReverseAD
-MLP
-MLPREV
-MLPBig
-TensorBigram
-TensorSmall
-TensorScale
-MLPScale
 GroupSSM
+MLP
+MLPBig
+MLPREV
+MLPScale
+ReverseAD
+TensorBigram
+TensorScale
+TensorSmall

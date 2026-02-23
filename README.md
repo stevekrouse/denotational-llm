@@ -43,7 +43,7 @@ Both are the same mathematical move: take a linear object, choose a basis/decomp
 
 **What's honest:** Most of the formalization verifies known things. Score decomposition is "log of a product = sum of logs." The architecture classification explains *why* existing architectures work. **But the tensor algebra and multi-head results are genuinely new:** the monoid structure suggests T₂(R^d) as state, rank decomposition of the readout gives multi-head attention, and the algebra predicts the smooth heads-vs-NLL tradeoff we observe empirically.
 
-**Attention from algebra.** T₂ and linear attention (Katharopoulos et al. 2020) are both monoid homomorphisms into matrices under addition. T₂ is the special case where key=value=raw embedding; linear attention generalizes with learned projections. The multi-head structure emerges from rank decomposition of the linear readout: a rank-H readout decomposes into H attention heads, each computing a query-key inner product. See `ATTENTION-ALGEBRA.md` for the full algebraic argument. The hierarchy is: bigram (diagonal) --> T₂ (full outer product) --> multi-head ProjT₂ (learned rank-H readout) --> linear attention (learned key/value/query) --> softmax attention (breaks the monoid).
+**Attention from algebra.** T₂ and linear attention (Katharopoulos et al. 2020) are both monoid homomorphisms into matrices under addition. T₂ is the special case where key=value=raw embedding; linear attention generalizes with learned projections. The multi-head structure emerges from rank decomposition of the linear readout: a rank-H readout decomposes into H attention heads, each computing a query-key inner product. See [`docs/ATTENTION-ALGEBRA.md`](docs/ATTENTION-ALGEBRA.md) for the full algebraic argument. The hierarchy is: bigram (diagonal) --> T₂ (full outer product) --> multi-head ProjT₂ (learned rank-H readout) --> linear attention (learned key/value/query) --> softmax attention (breaks the monoid).
 
 **What's not derived:** softmax attention (the normalization breaks the monoid homomorphism), positional encoding, and optimal rank selection. The transition from linear to softmax attention is where the algebra stops — softmax introduces non-compositionality.
 
@@ -111,10 +111,11 @@ Solid arrows are `open import` dependencies. Dotted arrows indicate that the exe
 | `TensorSmall.agda` | Tensor algebra model on small corpus for debugging and performance analysis |
 | `MLPBig.agda` | MLP with larger hidden layer to compete with tensor algebra (baseline for comparison) |
 | `GroupSSM.agda` | S₃ group algebra SSM: null result showing non-abelian structure doesn't help at small scale |
-| `tensor-bigram.js` | Fast JS implementation: trains tensor + MLP on all 32k names in <5s (the real benchmark) |
-| `tensor-scaling.js` | Scaling experiments: T₂ at d=2,4,8,16 and T₃ at d=2,4 with systematic sweep |
 | `linear-attention.js` | Linear attention vs T₂ comparison: tests whether learned key/value/query projections beat raw embeddings |
-| `ATTENTION-ALGEBRA.md` | Theoretical argument: T₂ → linear attention → softmax attention as algebraic hierarchy |
+| `docs/ATTENTION-ALGEBRA.md` | Theoretical argument: T₂ → linear attention → softmax attention as algebraic hierarchy |
+| `docs/WHY-T2.md` | Why T₂ is the right state: universal property of tensor algebra |
+| `archive/tensor-bigram.js` | Fast JS implementation: trains tensor + MLP on all 32k names in <5s (superseded by linear-attention.js) |
+| `archive/tensor-scaling.js` | Scaling experiments: T₂ at d=2,4,8,16 and T₃ at d=2,4 (superseded by linear-attention.js) |
 | `names.txt` | 32,032 names dataset from [Karpathy's makemore](https://github.com/karpathy/makemore) |
 
 ## Proven theorems
