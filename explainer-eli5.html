@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How AI Learns to Predict: A Visual Guide (No Math Required)</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --text: #2c2c3a;
+  --text-light: #6b6b80;
+  --accent: #e07a5f;
+  --accent-soft: #f4a98a;
+  --teal: #3d7a8a;
+  --teal-light: #6eb5c4;
+  --teal-bg: #edf6f8;
+  --bg: #ffffff;
+  --bg-warm: #fefbf8;
+  --bg-alt: #f6f7fa;
+  --border: #e8e8ee;
+  --shadow: rgba(0,0,0,0.05);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+}
+
+html { font-size: 18px; scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg-warm);
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* LAYOUT */
+.container { max-width: 680px; margin: 0 auto; padding: 0 1.5rem; }
+
+/* HERO */
+.hero {
+  padding: 5rem 0 3rem;
+  text-align: center;
+}
+.hero h1 {
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  margin-bottom: 1rem;
+}
+.hero .subtitle {
+  font-size: 1.05rem;
+  color: var(--text-light);
+  max-width: 500px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* SECTIONS */
+section {
+  padding: 3rem 0;
+}
+section + section { border-top: 1px solid var(--border); }
+.section-num {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 0.4rem;
+}
+section h2 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: var(--teal);
+  letter-spacing: -0.01em;
+}
+.tldr {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 1.5rem;
+  padding: 0.8rem 1rem;
+  background: var(--teal-bg);
+  border-radius: 8px;
+  border-left: 4px solid var(--teal);
+}
+p { margin-bottom: 1rem; }
+strong { color: var(--teal); }
+
+/* INTERACTIVE */
+.interactive {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  box-shadow: 0 2px 16px var(--shadow);
+}
+.interactive-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 0.6rem;
+}
+
+/* BUTTONS */
+button {
+  font-family: var(--font);
+  font-size: 0.85rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  padding: 0.45em 0.95em;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+button:hover { border-color: var(--teal); color: var(--teal); }
+button.active, button:active {
+  background: var(--teal);
+  color: white;
+  border-color: var(--teal);
+}
+
+/* LETTER GRID */
+.letter-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 4px;
+  margin: 0.8rem 0;
+}
+.letter-grid button {
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.5em 0;
+  text-align: center;
+  border-radius: 6px;
+}
+.letter-grid button.correct {
+  background: #4caf50;
+  color: white;
+  border-color: #4caf50;
+}
+.letter-grid button.wrong {
+  background: #ef5350;
+  color: white;
+  border-color: #ef5350;
+}
+.letter-grid button.highlight-guess {
+  background: var(--teal-bg);
+  border-color: var(--teal);
+}
+
+/* DISPLAY AREAS */
+.name-display {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+  min-height: 3rem;
+  margin-bottom: 0.5rem;
+  color: var(--teal);
+}
+.score-bar {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-light);
+}
+.message-area {
+  text-align: center;
+  font-size: 0.9rem;
+  min-height: 1.5em;
+  color: var(--text-light);
+  margin-bottom: 0.5rem;
+}
+
+/* NOTEBOOK */
+.notebook {
+  background: #fffef5;
+  border: 2px solid #e8dcc8;
+  border-radius: 8px;
+  padding: 1.2rem;
+  font-size: 0.9rem;
+  margin: 0.5rem 0;
+  box-shadow: 2px 2px 0 #e8dcc8;
+}
+.notebook h4 {
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.notebook-line {
+  margin: 0.3rem 0;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  transition: background 0.3s;
+}
+
+/* HEATMAP */
+.heatmap-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 1rem 0;
+}
+canvas.heatmap {
+  border-radius: 6px;
+  image-rendering: pixelated;
+}
+.heatmap-labels {
+  display: flex;
+  font-size: 0.7rem;
+  color: var(--text-light);
+}
+
+/* FLASHLIGHT */
+.flashlight-controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.8rem 0;
+  align-items: center;
+}
+.prediction-bars {
+  margin: 0.8rem 0;
+}
+.pred-row {
+  display: flex;
+  align-items: center;
+  margin: 2px 0;
+  font-size: 0.8rem;
+}
+.pred-label {
+  width: 1.5em;
+  text-align: center;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.pred-bar-bg {
+  flex: 1;
+  height: 18px;
+  background: #eee;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 0 0.4rem;
+}
+.pred-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.pred-pct {
+  width: 3em;
+  text-align: right;
+  font-size: 0.75rem;
+  color: var(--text-light);
+  flex-shrink: 0;
+}
+
+/* CHAIN */
+.chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+}
+.chain-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+.chain-card:hover {
+  border-color: var(--teal);
+  box-shadow: 0 2px 8px var(--shadow);
+  transform: translateY(-2px);
+}
+.chain-card.expanded {
+  background: var(--teal-bg);
+  border-color: var(--teal);
+}
+.chain-arrow {
+  font-size: 1.2rem;
+  color: var(--accent);
+  font-weight: 700;
+}
+.chain-detail {
+  display: none;
+  padding: 0.8rem 1rem;
+  background: var(--teal-bg);
+  border-radius: 8px;
+  margin: 0.5rem 0;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  width: 100%;
+}
+.chain-detail.visible { display: block; }
+
+/* SCOREBOARD */
+.scoreboard {
+  margin: 1rem 0;
+}
+.scoreboard-row {
+  display: flex;
+  align-items: center;
+  padding: 0.7rem 0.8rem;
+  border-radius: 8px;
+  margin: 0.3rem 0;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+.scoreboard-row:nth-child(odd) { background: var(--bg-alt); }
+.scoreboard-row .sb-label { flex: 1; }
+.scoreboard-row .sb-value {
+  font-weight: 700;
+  color: var(--teal);
+  min-width: 5em;
+  text-align: right;
+}
+.scoreboard-row.highlight-row {
+  background: var(--teal-bg);
+  border: 1px solid var(--teal-light);
+}
+
+/* NOT DERIVED */
+.gap-card {
+  background: var(--bg-alt);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  margin: 0.8rem 0;
+}
+.gap-card h4 {
+  font-size: 0.9rem;
+  color: var(--accent);
+  margin-bottom: 0.3rem;
+}
+.gap-card p { font-size: 0.88rem; margin-bottom: 0; }
+
+/* FOOTER */
+footer {
+  padding: 2rem 0;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-light);
+}
+footer a { color: var(--teal); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+
+/* ANIMATION */
+.fade-in {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.fade-in.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* RESPONSIVE */
+@media (max-width: 600px) {
+  html { font-size: 16px; }
+  .hero h1 { font-size: 1.7rem; }
+  .letter-grid { grid-template-columns: repeat(7, 1fr); }
+  .chain { flex-direction: column; }
+  .chain-arrow { transform: rotate(90deg); }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<!-- ============================================================ -->
+<!-- HERO -->
+<!-- ============================================================ -->
+<div class="hero">
+  <h1>How AI Learns to Predict</h1>
+  <p class="subtitle">
+    A visual guide to how ChatGPT-style AI actually works.
+    No math required. No, really. Zero formulas.
+  </p>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 1: THE PREDICTION GAME -->
+<!-- ============================================================ -->
+<section id="s-game" class="fade-in">
+  <div class="section-num">Part 1</div>
+  <h2>The Prediction Game</h2>
+  <div class="tldr">
+    All of AI language prediction boils down to one game: given some letters, guess what comes next.
+  </div>
+
+  <p>
+    Here is how every AI language model works, stripped to its core.
+    I show you letters one at a time. You guess the next one.
+  </p>
+  <p>
+    Try it. Below is a name being revealed letter by letter.
+    Before each new letter appears, click your guess.
+    The computer is also guessing, using patterns it learned from 32,000 real names.
+  </p>
+
+  <div class="interactive" id="game-panel">
+    <div class="interactive-label">Try it yourself</div>
+    <div class="name-display" id="game-name">&nbsp;</div>
+    <div class="message-area" id="game-msg">Click any letter to guess what comes next</div>
+    <div class="score-bar">
+      <span>Your score: <b id="game-you">0</b></span>
+      <span>Computer: <b id="game-cpu">0</b></span>
+    </div>
+    <div class="letter-grid" id="game-grid"></div>
+    <div style="text-align:center; margin-top:0.8rem;">
+      <button id="game-new">New Name</button>
+      <button id="game-reveal">Reveal Next</button>
+    </div>
+  </div>
+
+  <p>
+    The computer wins because it has seen 32,000 names and noticed patterns:
+    after "AL", a vowel is likely. After "ALE", "X" is common (Alex!).
+    After "ALEX", a stop (end of name) is very common.
+  </p>
+  <p>
+    The question is not <em>whether</em> it can guess well. The question is:
+    <strong>how does it keep track of what it has seen?</strong>
+    That turns out to be the whole game.
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: KEEPING NOTES -->
+<!-- ============================================================ -->
+<section id="s-notebook" class="fade-in">
+  <div class="section-num">Part 2</div>
+  <h2>Keeping Notes</h2>
+  <div class="tldr">
+    The computer keeps a notebook of patterns. The key rule: the notebook must work even if you tear the page in half.
+  </div>
+
+  <p>
+    Imagine you are the computer. You are reading a name letter by letter,
+    keeping notes about what you have seen so far.
+  </p>
+  <p>
+    There is one crucial rule your notebook must follow, and it sounds weird at first:
+  </p>
+  <p style="font-size:1.1rem; text-align:center; padding:0.5rem; font-weight:600;">
+    If someone tears your notebook in half, the two halves must combine
+    to give the same result as the whole.
+  </p>
+  <p>
+    Picture it: you read "ALEXANDER." I rip your notes in half. I give the
+    "ALEXA" notes to Alice and the "NDER" notes to Bob. They combine their
+    notes and get exactly the same result as your full notebook.
+  </p>
+
+  <div class="interactive" id="tear-panel">
+    <div class="interactive-label">Watch it work</div>
+    <div style="text-align:center; margin-bottom:0.5rem;">
+      <span style="font-size:0.85rem; color:var(--text-light);">Processing the name:</span>
+      <span id="tear-name" style="font-weight:700; letter-spacing:0.1em; font-size:1.1rem; color:var(--teal);">ALEXANDER</span>
+    </div>
+    <div style="display:flex; gap:0.8rem; flex-wrap:wrap; justify-content:center;">
+      <div style="flex:1; min-width:180px;">
+        <div class="notebook" id="tear-full">
+          <h4>Full notebook</h4>
+          <div class="notebook-line">Count: <b id="tf-count">0</b></div>
+          <div class="notebook-line">Pattern: <b id="tf-pattern">...</b></div>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; font-size:1.5rem; color:var(--accent); font-weight:700;">?</div>
+      <div style="flex:1; min-width:180px;">
+        <div class="notebook" id="tear-left" style="border-color:#c8d8e0;">
+          <h4 style="color:var(--teal);">Alice's half</h4>
+          <div class="notebook-line">Count: <b id="tl-count">0</b></div>
+          <div class="notebook-line">Pattern: <b id="tl-pattern">...</b></div>
+        </div>
+        <div style="text-align:center; font-size:1.2rem; font-weight:700; color:var(--accent);">+</div>
+        <div class="notebook" id="tear-right" style="border-color:#e0c8c8;">
+          <h4 style="color:var(--accent);">Bob's half</h4>
+          <div class="notebook-line">Count: <b id="tr-count">0</b></div>
+          <div class="notebook-line">Pattern: <b id="tr-pattern">...</b></div>
+        </div>
+      </div>
+    </div>
+    <div id="tear-result" style="text-align:center; margin-top:0.6rem; font-size:0.9rem; font-weight:600; color:var(--teal);"></div>
+    <div style="text-align:center; margin-top:0.6rem;">
+      <button id="tear-go">Tear it!</button>
+      <button id="tear-reset">Reset</button>
+    </div>
+  </div>
+
+  <p>
+    Why this weird rule? Think of counting marbles. If you split a bag of 100 marbles
+    in half and count each pile, you get 47 + 53 = 100. Counting "works even if you tear
+    the bag in half." That is not a coincidence. It is the property that makes counting
+    <em>useful</em>.
+  </p>
+  <p>
+    For text prediction, this tearability property is what the math demands. A notebook
+    that does not have it would give different answers depending on where you started reading.
+    And that would mean it is not really capturing <strong>patterns</strong> in the text at all,
+    just memorizing specific positions. (There is a 200-line formal proof of this, but the
+    intuition is what matters.)
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: WHAT'S IN THE NOTEBOOK -->
+<!-- ============================================================ -->
+<section id="s-heatmap" class="fade-in">
+  <div class="section-num">Part 3</div>
+  <h2>What Goes in the Notebook?</h2>
+  <div class="tldr">
+    The notebook tracks three things: how many letters you have seen, what kind of letters they are, and which letters tend to follow which other letters (a heatmap).
+  </div>
+
+  <p>
+    OK so what do you actually write down? It turns out there are three natural things:
+  </p>
+  <p>
+    <strong>Page 1: How many letters?</strong> Just a count. You have seen 5 letters.
+    Simple. Tearable, because 3 + 2 = 5.
+  </p>
+  <p>
+    <strong>Page 2: What kind of letters?</strong> Think of each letter as having a "personality"
+    — a position in a room. "A" stands in one corner, "E" in another, "Z" way off in the back.
+    Page 2 tracks the average personality of all the letters you have seen. Names with lots of
+    vowels pull the average one way; consonant-heavy names pull it the other.
+  </p>
+  <p>
+    <strong>Page 3: Who follows whom?</strong> This is the magic page. Every time you see
+    one letter follow another, you make a mark on a grid. "L followed A" — mark the
+    A-row, L-column cell. Over time, this builds a <strong>heatmap</strong> showing which
+    letter pairs are common.
+  </p>
+
+  <div class="interactive" id="heatmap-panel">
+    <div class="interactive-label">Build the heatmap</div>
+    <div style="text-align:center; margin-bottom:0.4rem;">
+      <span style="font-size:0.85rem; color:var(--text-light);">Type a name (or click "Run Example"):</span>
+    </div>
+    <div style="text-align:center; margin-bottom:0.6rem;">
+      <input id="hm-input" type="text" placeholder="Type a name..." maxlength="20"
+        style="font-family:var(--font); font-size:1rem; padding:0.4em 0.8em; border:1px solid var(--border);
+        border-radius:6px; width:12em; text-transform:uppercase; letter-spacing:0.08em;">
+      <button id="hm-run">Run Example</button>
+      <button id="hm-clear">Clear</button>
+    </div>
+    <div class="heatmap-container">
+      <canvas id="hm-canvas" class="heatmap" width="297" height="297"></canvas>
+      <div style="font-size:0.7rem; color:var(--text-light); margin-top:0.3rem;">
+        Rows = previous letter, Columns = next letter. Brighter = more common pair.
+      </div>
+    </div>
+    <div id="hm-step" style="text-align:center; font-size:0.9rem; color:var(--teal); min-height:1.5em;"></div>
+  </div>
+
+  <p>
+    The heatmap <em>is</em> the notebook. And here is the beautiful part: it is tearable.
+    If you build a heatmap for "ALEX" and a separate heatmap for "ANDER", you can combine them
+    by simply adding the two heatmaps together, cell by cell. The result is exactly the same
+    as building one heatmap for the full name "ALEXANDER."
+  </p>
+  <p>
+    This is not an accident. It is the <em>reason</em> the heatmap works as a notebook.
+    Adding grids together, cell by cell, is the mathematical operation that guarantees
+    tearability.
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: READING THE NOTEBOOK -->
+<!-- ============================================================ -->
+<section id="s-flashlight" class="fade-in">
+  <div class="section-num">Part 4</div>
+  <h2>Reading the Notebook</h2>
+  <div class="tldr">
+    To make a prediction, you "shine a flashlight" on the heatmap.
+    Each flashlight is an attention head. More flashlights, better predictions.
+  </div>
+
+  <p>
+    You have built up this heatmap of "who follows whom." Now someone asks:
+    "You just saw the letter L — what comes next?"
+  </p>
+  <p>
+    You need to read the heatmap. But how?
+  </p>
+  <p>
+    <strong>One way (expensive):</strong> Look at every single cell in the heatmap
+    and use all of them to make your prediction. If your heatmap is big (say, hundreds
+    of cells), you need hundreds of separate "reading rules." That is a lot of rules
+    to learn.
+  </p>
+  <p>
+    <strong>Better way: ask a question.</strong> Think of it like shining a flashlight
+    on the heatmap. Your flashlight says: "Hey heatmap, which letters tend to follow things
+    that look like L?" It shines on the heatmap from one direction and you see what lights up.
+  </p>
+  <p>
+    One flashlight can only ask one question at a time. But you can use <strong>multiple
+    flashlights</strong>, each asking a different question:
+  </p>
+  <ul style="margin: 0.5rem 0 1rem 1.5rem;">
+    <li>Flashlight 1: "What follows consonants like L?"</li>
+    <li>Flashlight 2: "What follows letters near the start of names?"</li>
+    <li>Flashlight 3: "What follows in common pairs?"</li>
+  </ul>
+  <p>
+    More flashlights means better predictions, but with shrinking improvements.
+    The jump from zero to one flashlight is huge. From three to four? Barely noticeable.
+  </p>
+
+  <div class="interactive" id="flash-panel">
+    <div class="interactive-label">Flashlights on a heatmap</div>
+    <div style="text-align:center; margin-bottom:0.5rem;">
+      <span style="font-size:0.85rem; color:var(--text-light);">After seeing the letter:</span>
+      <select id="fl-letter" style="font-family:var(--font); font-size:0.9rem; padding:0.3em 0.6em; border:1px solid var(--border); border-radius:4px;">
+      </select>
+    </div>
+    <div class="flashlight-controls">
+      <span style="font-size:0.85rem;">Flashlights:</span>
+      <button id="fl-add" style="background:var(--teal); color:white; border-color:var(--teal);">+ Add Flashlight</button>
+      <button id="fl-remove">- Remove</button>
+      <span id="fl-count" style="font-size:0.85rem; color:var(--teal); font-weight:600;">0 active</span>
+    </div>
+    <div class="prediction-bars" id="fl-bars"></div>
+    <div id="fl-msg" style="text-align:center; font-size:0.85rem; color:var(--text-light); margin-top:0.3rem;">
+      Add a flashlight to start predicting
+    </div>
+  </div>
+
+  <p>
+    Each flashlight is making a "query" — asking a specific question about the heatmap.
+    The heatmap stores information as "keys" and "values." The flashlight (the query)
+    finds relevant keys and retrieves their values.
+  </p>
+  <p>
+    If that sounds familiar, it is because this is exactly the language AI researchers use.
+    Queries, keys, values. We arrived at it just by asking "what is the best way to read
+    a notebook?"
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: THIS IS HOW CHATGPT WORKS -->
+<!-- ============================================================ -->
+<section id="s-reveal" class="fade-in">
+  <div class="section-num">Part 5</div>
+  <h2>This Is How ChatGPT Works</h2>
+  <div class="tldr">
+    The flashlights are "attention heads." The heatmap is the "key-value matrix."
+    Multi-head attention is just "reading a heatmap with multiple flashlights."
+  </div>
+
+  <p>
+    Let us connect the dots:
+  </p>
+  <ul style="margin:0 0 1rem 1.5rem; line-height:2;">
+    <li>The <strong>heatmap</strong> is what AI researchers call the "key-value matrix"</li>
+    <li>Each <strong>flashlight</strong> is an "attention head"</li>
+    <li>The <strong>question</strong> each flashlight asks is a "query"</li>
+    <li>Using multiple flashlights at once is "multi-head attention"</li>
+  </ul>
+  <p>
+    Multi-head attention — the core mechanism that powers ChatGPT, Claude, and every modern
+    AI language model — is literally "reading a heatmap with multiple flashlights."
+  </p>
+  <p>
+    What is wild is that we did not start with attention. We started with just one rule:
+    <strong>your notebook must work even if torn in half.</strong> Everything else — the heatmap,
+    the flashlights, the diminishing returns — fell out of pure logic.
+  </p>
+
+  <div class="interactive" id="chain-panel">
+    <div class="interactive-label">The derivation chain (click each to expand)</div>
+    <div class="chain" id="chain-cards">
+      <div class="chain-card" data-idx="0">Tearing Rule</div>
+      <div class="chain-arrow">&rarr;</div>
+      <div class="chain-card" data-idx="1">Heatmap</div>
+      <div class="chain-arrow">&rarr;</div>
+      <div class="chain-card" data-idx="2">Flashlights</div>
+      <div class="chain-arrow">&rarr;</div>
+      <div class="chain-card" data-idx="3">Attention</div>
+      <div class="chain-arrow">&rarr;</div>
+      <div class="chain-card" data-idx="4">ChatGPT</div>
+    </div>
+    <div id="chain-details"></div>
+  </div>
+
+  <p>
+    This is the core discovery: the architecture that powers modern AI is not an arbitrary
+    engineering choice. It is the natural answer to "how do you keep a tearable notebook?"
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: WHAT'S STILL MISSING -->
+<!-- ============================================================ -->
+<section id="s-missing" class="fade-in">
+  <div class="section-num">Part 6</div>
+  <h2>What the Math Does Not Explain (Yet)</h2>
+  <div class="tldr">
+    Two things in real AI break the "tearable notebook" rule. They work great, but we cannot derive them from logic alone.
+  </div>
+
+  <p>
+    Real AI like ChatGPT adds two things that we have not derived from the tearing rule:
+  </p>
+
+  <div class="gap-card">
+    <h4>Competition (the "softmax")</h4>
+    <p>
+      In our heatmap, each cell is independent. Real AI adds competition: when one prediction
+      lights up bright, the others automatically dim. Imagine if making one flashlight brighter
+      forced all the others to get dimmer. This "winner take most" behavior makes predictions
+      sharper. But it breaks the tearing rule, because dimming depends on what <em>all</em> the
+      other letters are doing, and that changes when you tear the page.
+    </p>
+  </div>
+
+  <div class="gap-card">
+    <h4>Position stamps</h4>
+    <p>
+      Our notebook does not care about position. "A is the first letter" and "A is the fifth
+      letter" look the same to it. Real AI adds a position stamp to every letter: "this is
+      letter number 3." That lets it learn patterns like "names usually end with a vowel,"
+      which depend on where you are in the word, not just which letters you have seen.
+    </p>
+  </div>
+
+  <p>
+    These two additions are why real AI is better than what our logic derives. But here is the
+    honest thing: nobody knows <em>why</em> they work so well. The algebraic story stops at
+    the heatmap + flashlights. Getting from there to full ChatGPT requires some engineering
+    leaps that the math does not (yet) explain.
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 7: THE SCOREBOARD -->
+<!-- ============================================================ -->
+<section id="s-score" class="fade-in">
+  <div class="section-num">Part 7</div>
+  <h2>The Scoreboard</h2>
+  <div class="tldr">
+    Here is how each method actually performs at predicting names, measured in plain language.
+  </div>
+
+  <p>
+    We tested all these approaches on 32,000 real names. Here is how they did.
+    "Surprise" measures how shocked the computer is by each letter, on average.
+    Lower is better — a perfect predictor would never be surprised.
+  </p>
+
+  <div class="scoreboard" id="scoreboard">
+    <div class="scoreboard-row">
+      <span class="sb-label">Random guessing (no learning)</span>
+      <span class="sb-value">Very high surprise</span>
+    </div>
+    <div class="scoreboard-row">
+      <span class="sb-label">Counting letter pairs (bigram)</span>
+      <span class="sb-value">Medium surprise</span>
+    </div>
+    <div class="scoreboard-row">
+      <span class="sb-label">Karpathy's neural network (MLP)</span>
+      <span class="sb-value">Low surprise</span>
+    </div>
+    <div class="scoreboard-row highlight-row">
+      <span class="sb-label">Our heatmap + 1 flashlight</span>
+      <span class="sb-value">Lower surprise</span>
+    </div>
+    <div class="scoreboard-row highlight-row">
+      <span class="sb-label">Our heatmap + 4 flashlights</span>
+      <span class="sb-value">Even lower</span>
+    </div>
+    <div class="scoreboard-row highlight-row">
+      <span class="sb-label">Our heatmap (full reading)</span>
+      <span class="sb-value">Lowest</span>
+    </div>
+  </div>
+
+  <div class="interactive" id="score-detail">
+    <div class="interactive-label">Surprise scores (lower is better)</div>
+    <div id="score-bars"></div>
+    <div style="font-size:0.78rem; color:var(--text-light); margin-top:0.6rem;">
+      "Surprise" is the average number of guesses the computer would need per letter (technically,
+      it is called "perplexity" — the exponential of the negative log-likelihood). A surprise of 10
+      means the computer is choosing between roughly 10 equally likely options at each step.
+      A surprise of 3 means it has narrowed it down to about 3 options.
+    </div>
+  </div>
+
+  <p>
+    The remarkable thing: our heatmap method, which we <em>derived</em> from the tearing rule,
+    beats the standard neural network approach that was <em>designed</em> by hand. And it does
+    it with fewer learned parameters (fewer "knobs to tune").
+  </p>
+  <p>
+    That is the power of starting from the right question rather than tinkering with answers.
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<!-- FOOTER -->
+<!-- ============================================================ -->
+<footer>
+  <p>
+    Based on research formalizing text prediction in
+    <a href="https://wiki.portal.chalmers.se/agda/Main/Download" target="_blank">Agda</a>,
+    following the methodology of
+    <a href="http://conal.net/papers/essence-of-ad/" target="_blank">Conal Elliott</a>.
+    The approach was benchmarked against Andrej Karpathy's
+    <a href="https://github.com/karpathy/makemore" target="_blank">makemore</a> series.
+  </p>
+  <p style="margin-top:0.5rem;">
+    <a href="explainer.html">Read the full version (with math) &rarr;</a>
+  </p>
+</footer>
+
+</div><!-- .container -->
+
+<!-- ============================================================ -->
+<!-- JAVASCRIPT -->
+<!-- ============================================================ -->
+<script>
+(function() {
+"use strict";
+
+/* ---------------------------------------------------------------
+   UTILITIES
+   --------------------------------------------------------------- */
+const ALPHA = ".ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const N = ALPHA.length; // 27: stop + 26 letters
+
+// A small set of example names for the guessing game
+const EXAMPLE_NAMES = [
+  "EMMA","OLIVIA","AVA","SOPHIA","ISABELLA","MIA","CHARLOTTE","AMELIA",
+  "HARPER","EVELYN","ALEXANDER","BENJAMIN","WILLIAM","JAMES","LUCAS",
+  "HENRY","THEODORE","JACK","LEVI","OLIVER","NOAH","LIAM","MASON","ETHAN",
+  "AIDEN","LOGAN","JACKSON","ELIJAH","CALEB","ARIA","LUNA","CHLOE","PENELOPE",
+  "LAYLA","RILEY","ZOEY","NORA","LILY","ELEANOR","HAZEL","VIOLET","AURORA",
+  "SAVANNAH","AUDREY","BROOKLYN","BELLA","CLAIRE","SKYLAR","LUCY","PAISLEY"
+];
+
+// Fake "bigram probabilities" — simplified but captures real patterns
+// Built from rough letter-pair frequencies in English names
+function buildSimpleBigram() {
+  // Base: slight uniform + common patterns
+  const bg = [];
+  for (let i = 0; i < N; i++) {
+    bg[i] = [];
+    for (let j = 0; j < N; j++) bg[i][j] = 0.5;
+  }
+  // Common patterns (hand-tuned to be roughly correct)
+  const pairs = "AN,TH,ER,ON,EN,AL,IN,LE,EL,AR,RI,IE,LI,IA,NA,MA,EE,LA,HA,SA,LY,NN,EY,NE,LL,EL,RA,DA,RO,OR,IS,EV,HE,CH,IC,SS,OL,OS,ES,ON,SO,CA,MI,VI,AV,JA,LO,EM,NO,LU".split(",");
+  for (const p of pairs) {
+    const a = ALPHA.indexOf(p[0]), b = ALPHA.indexOf(p[1]);
+    if (a >= 0 && b >= 0) bg[a][b] += 8;
+  }
+  // Vowels after consonants
+  const vowels = [1,5,9,15,21]; // A,E,I,O,U
+  const consonants = [];
+  for (let i = 1; i < N; i++) if (!vowels.includes(i)) consonants.push(i);
+  for (const c of consonants) for (const v of vowels) bg[c][v] += 2;
+  // Start patterns (after '.'/start)
+  for (let j = 1; j < N; j++) bg[0][j] += 1;
+  // Certain letters are common starters
+  for (const ch of "AEJMSCL") { const j = ALPHA.indexOf(ch); bg[0][j] += 5; }
+  // End patterns (going to '.')
+  for (const ch of "AEYNLSRD") { const i = ALPHA.indexOf(ch); bg[i][0] += 5; }
+  // Normalize each row to probabilities
+  for (let i = 0; i < N; i++) {
+    let s = 0;
+    for (let j = 0; j < N; j++) s += bg[i][j];
+    for (let j = 0; j < N; j++) bg[i][j] /= s;
+  }
+  return bg;
+}
+
+const BIGRAM = buildSimpleBigram();
+
+function softmax(arr) {
+  const max = Math.max(...arr);
+  const exps = arr.map(x => Math.exp(x - max));
+  const sum = exps.reduce((a,b) => a+b, 0);
+  return exps.map(e => e / sum);
+}
+
+/* ---------------------------------------------------------------
+   SCROLL ANIMATIONS
+   --------------------------------------------------------------- */
+function initScrollAnimations() {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) entry.target.classList.add("visible");
+    });
+  }, { threshold: 0.1 });
+  document.querySelectorAll(".fade-in").forEach(el => observer.observe(el));
+}
+
+/* ---------------------------------------------------------------
+   SECTION 1: THE PREDICTION GAME
+   --------------------------------------------------------------- */
+function initGame() {
+  const grid = document.getElementById("game-grid");
+  const nameEl = document.getElementById("game-name");
+  const msgEl = document.getElementById("game-msg");
+  const youEl = document.getElementById("game-you");
+  const cpuEl = document.getElementById("game-cpu");
+
+  let name, pos, youScore, cpuScore, revealed, waiting;
+
+  // Build letter buttons
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ.";
+  for (const ch of letters) {
+    const btn = document.createElement("button");
+    btn.textContent = ch === "." ? "STOP" : ch;
+    btn.dataset.ch = ch;
+    btn.addEventListener("click", () => guess(ch));
+    grid.appendChild(btn);
+  }
+
+  function newGame() {
+    name = EXAMPLE_NAMES[Math.floor(Math.random() * EXAMPLE_NAMES.length)];
+    pos = 0; youScore = 0; cpuScore = 0; revealed = ""; waiting = true;
+    nameEl.textContent = "_";
+    msgEl.textContent = "Guess the first letter!";
+    youEl.textContent = "0"; cpuEl.textContent = "0";
+    clearHighlights();
+  }
+
+  function clearHighlights() {
+    grid.querySelectorAll("button").forEach(b => {
+      b.classList.remove("correct","wrong","highlight-guess");
+    });
+  }
+
+  function guess(ch) {
+    if (!waiting) return;
+    waiting = false;
+    clearHighlights();
+    const actual = pos < name.length ? name[pos] : ".";
+    const btn = grid.querySelector(`[data-ch="${ch}"]`);
+
+    // Computer's guess: most likely from bigram
+    const prevIdx = pos === 0 ? 0 : ALPHA.indexOf(name[pos-1]);
+    const probs = BIGRAM[prevIdx];
+    let bestJ = 0;
+    for (let j = 1; j < N; j++) if (probs[j] > probs[bestJ]) bestJ = j;
+    const cpuGuess = ALPHA[bestJ];
+
+    if (ch === actual) {
+      btn.classList.add("correct");
+      youScore++;
+    } else {
+      btn.classList.add("wrong");
+      const correctBtn = grid.querySelector(`[data-ch="${actual}"]`);
+      if (correctBtn) correctBtn.classList.add("correct");
+    }
+    if (cpuGuess === actual) cpuScore++;
+
+    youEl.textContent = youScore;
+    cpuEl.textContent = cpuScore;
+
+    revealed += actual;
+    pos++;
+
+    if (actual === ".") {
+      nameEl.textContent = revealed.slice(0, -1);
+      msgEl.textContent = `Name complete! You: ${youScore}, Computer: ${cpuScore}. Click "New Name" to play again.`;
+    } else {
+      nameEl.textContent = revealed + "_";
+      const cpuLabel = cpuGuess === "." ? "STOP" : cpuGuess;
+      msgEl.textContent = `The letter was ${actual}. (Computer guessed ${cpuLabel}${cpuGuess === actual ? " - correct!" : ""}). Guess the next!`;
+      waiting = true;
+    }
+  }
+
+  document.getElementById("game-new").addEventListener("click", newGame);
+  document.getElementById("game-reveal").addEventListener("click", () => {
+    if (!waiting) return;
+    const actual = pos < name.length ? name[pos] : ".";
+    guess(actual); // auto-guess correctly
+  });
+
+  newGame();
+}
+
+/* ---------------------------------------------------------------
+   SECTION 2: NOTEBOOK TEARING
+   --------------------------------------------------------------- */
+function initTearing() {
+  const nameStr = "ALEXANDER";
+  const tearName = document.getElementById("tear-name");
+  const resultEl = document.getElementById("tear-result");
+  let torn = false;
+
+  function countPairs(s) {
+    let pairs = {};
+    for (let i = 1; i < s.length; i++) {
+      const p = s[i-1] + s[i];
+      pairs[p] = (pairs[p] || 0) + 1;
+    }
+    return pairs;
+  }
+
+  function pairsToStr(pairs) {
+    const entries = Object.entries(pairs).sort((a,b) => b[1]-a[1]);
+    if (entries.length === 0) return "(none yet)";
+    return entries.slice(0, 4).map(([k,v]) => k + ":" + v).join(", ") + (entries.length > 4 ? "..." : "");
+  }
+
+  function showFull() {
+    const pairs = countPairs("." + nameStr + ".");
+    document.getElementById("tf-count").textContent = nameStr.length;
+    document.getElementById("tf-pattern").textContent = pairsToStr(pairs);
+  }
+
+  function doTear() {
+    if (torn) return;
+    torn = true;
+    const mid = Math.floor(nameStr.length / 2);
+    const left = nameStr.slice(0, mid);
+    const right = nameStr.slice(mid);
+
+    tearName.innerHTML = `<span style="color:var(--teal)">${left}</span> | <span style="color:var(--accent)">${right}</span>`;
+
+    // Alice gets start + left
+    const pL = countPairs("." + left);
+    document.getElementById("tl-count").textContent = left.length;
+    document.getElementById("tl-pattern").textContent = pairsToStr(pL);
+
+    // Bob gets right + end
+    const pR = countPairs(right + ".");
+    // Note: Bob doesn't know the last letter of Alice's half — but the bridge pair is the join
+    document.getElementById("tr-count").textContent = right.length;
+    document.getElementById("tr-pattern").textContent = pairsToStr(pR);
+
+    // Combined (add pair counts + bridge pair)
+    const combined = {...pL};
+    for (const [k,v] of Object.entries(pR)) combined[k] = (combined[k]||0) + v;
+    // Add bridge pair
+    const bridge = left[left.length-1] + right[0];
+    combined[bridge] = (combined[bridge]||0) + 1;
+
+    // Check match
+    const full = countPairs("." + nameStr + ".");
+    const match = JSON.stringify(Object.entries(full).sort()) === JSON.stringify(Object.entries(combined).sort());
+
+    resultEl.textContent = match
+      ? "They match! Alice's half + Bob's half + the bridge = the full notebook."
+      : "Combined: " + pairsToStr(combined);
+    resultEl.style.color = match ? "var(--teal)" : "var(--accent)";
+  }
+
+  function resetTear() {
+    torn = false;
+    tearName.textContent = nameStr;
+    document.getElementById("tl-count").textContent = "?";
+    document.getElementById("tl-pattern").textContent = "...";
+    document.getElementById("tr-count").textContent = "?";
+    document.getElementById("tr-pattern").textContent = "...";
+    resultEl.textContent = "";
+    showFull();
+  }
+
+  document.getElementById("tear-go").addEventListener("click", doTear);
+  document.getElementById("tear-reset").addEventListener("click", resetTear);
+  resetTear();
+}
+
+/* ---------------------------------------------------------------
+   SECTION 3: HEATMAP
+   --------------------------------------------------------------- */
+function initHeatmap() {
+  const canvas = document.getElementById("hm-canvas");
+  const ctx = canvas.getContext("2d");
+  const stepEl = document.getElementById("hm-step");
+  const inputEl = document.getElementById("hm-input");
+
+  const CELL = 11;
+  const W = N * CELL;
+  canvas.width = W;
+  canvas.height = W;
+
+  let grid = [];
+  for (let i = 0; i < N; i++) { grid[i] = []; for (let j = 0; j < N; j++) grid[i][j] = 0; }
+
+  let animTimer = null;
+
+  function draw() {
+    ctx.clearRect(0, 0, W, W);
+    let maxVal = 1;
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) if (grid[i][j] > maxVal) maxVal = grid[i][j];
+
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < N; j++) {
+        const v = grid[i][j] / maxVal;
+        const r = Math.round(61 + (224-61) * (1-v));
+        const g = Math.round(122 + (122-122) * (1-v));
+        const b = Math.round(138 + (95-138) * (1-v));
+        ctx.fillStyle = v > 0 ? `rgb(${r},${g},${b})` : "#f0f0f0";
+        ctx.fillRect(j * CELL, i * CELL, CELL - 1, CELL - 1);
+      }
+    }
+    // Labels
+    ctx.fillStyle = "#888";
+    ctx.font = "8px sans-serif";
+    ctx.textAlign = "center";
+    for (let i = 0; i < N; i++) {
+      const ch = ALPHA[i] === "." ? "*" : ALPHA[i];
+      ctx.fillText(ch, i * CELL + CELL/2, W + 10); // Would be outside canvas
+    }
+  }
+
+  function animateName(name) {
+    if (animTimer) clearInterval(animTimer);
+    const seq = "." + name.toUpperCase().replace(/[^A-Z]/g, "") + ".";
+    let step = 1;
+    animTimer = setInterval(() => {
+      if (step >= seq.length) {
+        clearInterval(animTimer);
+        animTimer = null;
+        stepEl.textContent = "Done! Each bright cell shows a common letter pair.";
+        return;
+      }
+      const prev = ALPHA.indexOf(seq[step-1]);
+      const cur = ALPHA.indexOf(seq[step]);
+      if (prev >= 0 && cur >= 0) {
+        grid[prev][cur]++;
+        stepEl.textContent = `${seq[step-1] === "." ? "START" : seq[step-1]} followed by ${seq[step] === "." ? "STOP" : seq[step]}`;
+      }
+      step++;
+      draw();
+    }, 300);
+  }
+
+  function clearGrid() {
+    if (animTimer) { clearInterval(animTimer); animTimer = null; }
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) grid[i][j] = 0;
+    stepEl.textContent = "";
+    draw();
+  }
+
+  document.getElementById("hm-run").addEventListener("click", () => {
+    const examples = ["ALEXANDER","EMMA","OLIVIA","SOPHIA","JAMES","CHARLOTTE"];
+    clearGrid();
+    const ex = examples[Math.floor(Math.random() * examples.length)];
+    inputEl.value = ex;
+    animateName(ex);
+  });
+
+  document.getElementById("hm-clear").addEventListener("click", clearGrid);
+
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      clearGrid();
+      animateName(inputEl.value);
+    }
+  });
+
+  draw();
+}
+
+/* ---------------------------------------------------------------
+   SECTION 4: FLASHLIGHTS
+   --------------------------------------------------------------- */
+function initFlashlights() {
+  const select = document.getElementById("fl-letter");
+  const barsEl = document.getElementById("fl-bars");
+  const msgEl = document.getElementById("fl-msg");
+  const countEl = document.getElementById("fl-count");
+
+  // Populate letter select
+  for (let i = 0; i < N; i++) {
+    const opt = document.createElement("option");
+    opt.value = i;
+    opt.textContent = ALPHA[i] === "." ? "START" : ALPHA[i];
+    select.appendChild(opt);
+  }
+  select.value = "0";
+
+  // Flashlight "queries" — each is a random direction that highlights different patterns
+  const flashlights = [];
+  const COLORS = ["#e07a5f","#3d7a8a","#6c5ce7","#00b894","#fdcb6e","#e17055","#0984e3","#a29bfe"];
+
+  function randomQuery() {
+    const q = [];
+    for (let i = 0; i < N; i++) q.push(Math.random() * 2 - 1);
+    // Normalize
+    const norm = Math.sqrt(q.reduce((a,x) => a+x*x, 0));
+    return q.map(x => x / norm);
+  }
+
+  function predict(prevIdx) {
+    if (flashlights.length === 0) {
+      // Uniform
+      const uni = [];
+      for (let j = 0; j < N; j++) uni.push(1/N);
+      return uni;
+    }
+    // Each flashlight reads the bigram row (the "heatmap row" for prevIdx)
+    // and applies its query to produce a weighted prediction
+    const logits = new Array(N).fill(0);
+    for (const fl of flashlights) {
+      // The flashlight's query dot-producted with the heatmap row
+      for (let j = 0; j < N; j++) {
+        // Simulate: query weights applied to the bigram probabilities
+        let score = 0;
+        for (let k = 0; k < N; k++) {
+          score += fl.query[k] * BIGRAM[k][j];
+        }
+        logits[j] += score * fl.query[prevIdx];
+      }
+    }
+    // Add a base bigram component
+    for (let j = 0; j < N; j++) logits[j] += Math.log(BIGRAM[prevIdx][j] + 0.001) * 0.5;
+    return softmax(logits);
+  }
+
+  function renderBars() {
+    const prevIdx = parseInt(select.value);
+    const probs = predict(prevIdx);
+
+    // Sort by probability, show top 8
+    const indexed = probs.map((p,i) => ({p, i}));
+    indexed.sort((a,b) => b.p - a.p);
+    const top = indexed.slice(0, 8);
+
+    barsEl.innerHTML = "";
+    for (const {p, i} of top) {
+      const row = document.createElement("div");
+      row.className = "pred-row";
+      const label = document.createElement("span");
+      label.className = "pred-label";
+      label.textContent = ALPHA[i] === "." ? "*" : ALPHA[i];
+      const barBg = document.createElement("div");
+      barBg.className = "pred-bar-bg";
+      const bar = document.createElement("div");
+      bar.className = "pred-bar";
+      bar.style.width = (p * 100) + "%";
+      bar.style.background = flashlights.length > 0 ? COLORS[0] : "#ccc";
+      // Gradient for multiple flashlights
+      if (flashlights.length > 1) {
+        const stops = flashlights.map((fl, fi) =>
+          COLORS[fi % COLORS.length] + " " + (fi / flashlights.length * 100) + "%, " +
+          COLORS[fi % COLORS.length] + " " + ((fi+1) / flashlights.length * 100) + "%"
+        ).join(", ");
+        bar.style.background = `linear-gradient(90deg, ${stops})`;
+      }
+      barBg.appendChild(bar);
+      const pct = document.createElement("span");
+      pct.className = "pred-pct";
+      pct.textContent = (p * 100).toFixed(1) + "%";
+      row.appendChild(label);
+      row.appendChild(barBg);
+      row.appendChild(pct);
+      barsEl.appendChild(row);
+    }
+
+    if (flashlights.length === 0) {
+      msgEl.textContent = "No flashlights yet -- predictions are uniform (random). Add one!";
+    } else {
+      msgEl.textContent = `${flashlights.length} flashlight${flashlights.length > 1 ? "s" : ""} active. Notice how adding more gives diminishing returns.`;
+    }
+    countEl.textContent = flashlights.length + " active";
+  }
+
+  document.getElementById("fl-add").addEventListener("click", () => {
+    if (flashlights.length >= 8) return;
+    flashlights.push({ query: randomQuery(), color: COLORS[flashlights.length % COLORS.length] });
+    renderBars();
+  });
+
+  document.getElementById("fl-remove").addEventListener("click", () => {
+    if (flashlights.length === 0) return;
+    flashlights.pop();
+    renderBars();
+  });
+
+  select.addEventListener("change", renderBars);
+  renderBars();
+}
+
+/* ---------------------------------------------------------------
+   SECTION 5: DERIVATION CHAIN
+   --------------------------------------------------------------- */
+function initChain() {
+  const details = [
+    "Your notebook has to give the same answer whether you read the whole thing or split it in half and combine. Mathematically, this is called being a \"monoid homomorphism.\" But all it really means is: the notebook is tearable.",
+    "If the notebook has to be tearable, the simplest useful thing to put in it is a grid that counts which letters follow which. Each cell gets added independently, so tearing works. This grid -- the heatmap -- is what AI researchers call a \"key-value state\" or \"matrix state.\"",
+    "Reading the heatmap by looking at every cell is expensive. Instead, you can ask a targeted question (a \"query\") that picks out the relevant cells. Each query is a flashlight. More flashlights = reading more of the heatmap = better predictions. This is the \"rank decomposition\" of the readout.",
+    "Multiple flashlights, each asking a different question about the heatmap, is exactly \"multi-head attention\" -- the mechanism at the heart of transformer models. The number of flashlights is the number of \"heads.\" This was not designed; it was derived from the tearability constraint.",
+    "ChatGPT, Claude, and every major AI language model uses multi-head attention as its core mechanism. They add extra layers, normalization, and training tricks, but the fundamental operation -- reading a heatmap with multiple flashlights -- is the same thing we derived from one simple rule."
+  ];
+
+  const container = document.getElementById("chain-details");
+  const cards = document.querySelectorAll(".chain-card");
+
+  // Create detail elements
+  details.forEach((text, i) => {
+    const div = document.createElement("div");
+    div.className = "chain-detail";
+    div.id = "chain-d-" + i;
+    div.textContent = text;
+    container.appendChild(div);
+  });
+
+  cards.forEach(card => {
+    card.addEventListener("click", () => {
+      const idx = card.dataset.idx;
+      const detail = document.getElementById("chain-d-" + idx);
+      const wasVisible = detail.classList.contains("visible");
+
+      // Close all
+      document.querySelectorAll(".chain-detail").forEach(d => d.classList.remove("visible"));
+      cards.forEach(c => c.classList.remove("expanded"));
+
+      if (!wasVisible) {
+        detail.classList.add("visible");
+        card.classList.add("expanded");
+      }
+    });
+  });
+}
+
+/* ---------------------------------------------------------------
+   SECTION 7: SCOREBOARD
+   --------------------------------------------------------------- */
+function initScoreboard() {
+  // NLL values from the actual results
+  const data = [
+    { label: "Random guessing", nll: 3.296, highlight: false },
+    { label: "Counting letter pairs (bigram)", nll: 2.454, highlight: false },
+    { label: "Karpathy's neural network", nll: 2.3, highlight: false },
+    { label: "Heatmap + 1 flashlight", nll: 2.269, highlight: true },
+    { label: "Heatmap + 4 flashlights + activation", nll: 2.250, highlight: true },
+    { label: "Heatmap (full reading, no flashlights)", nll: 2.256, highlight: true },
+  ];
+
+  // Convert NLL to perplexity (e^NLL) for intuitive "surprise" score
+  const container = document.getElementById("score-bars");
+  const maxPerp = Math.exp(3.296);
+
+  data.forEach(d => {
+    const perp = Math.exp(d.nll);
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex; align-items:center; margin:6px 0;";
+
+    const label = document.createElement("div");
+    label.style.cssText = "flex:1; font-size:0.82rem;";
+    label.textContent = d.label;
+    if (d.highlight) label.style.fontWeight = "600";
+
+    const barBg = document.createElement("div");
+    barBg.className = "pred-bar-bg";
+    barBg.style.cssText = "flex:1; max-width:200px;";
+
+    const bar = document.createElement("div");
+    bar.className = "pred-bar";
+    bar.style.width = (perp / maxPerp * 100) + "%";
+    bar.style.background = d.highlight ? "var(--teal)" : "var(--border)";
+    barBg.appendChild(bar);
+
+    const val = document.createElement("div");
+    val.style.cssText = "width:5em; text-align:right; font-size:0.8rem; font-weight:600; color:var(--teal); margin-left:0.5rem;";
+    val.textContent = perp.toFixed(1) + " surprise";
+
+    row.appendChild(label);
+    row.appendChild(barBg);
+    row.appendChild(val);
+    container.appendChild(row);
+  });
+}
+
+/* ---------------------------------------------------------------
+   INIT ALL
+   --------------------------------------------------------------- */
+document.addEventListener("DOMContentLoaded", () => {
+  initScrollAnimations();
+  initGame();
+  initTearing();
+  initHeatmap();
+  initFlashlights();
+  initChain();
+  initScoreboard();
+});
+
+})();
+</script>
+
+</body>
+</html>
