@@ -118,6 +118,8 @@ The real test of whether this project succeeds in Conal's sense. Don't just clas
 
 **Check agents on EVERY response.** Every time the top-level agent responds to the user (for any reason), it MUST also check on all running subagents — read their latest output, assess if they're stuck or off-track, kill and restart if needed. This is non-negotiable. Include a brief status line for each running agent in every response.
 
+**Watchdog timer.** Always keep a background "watchdog" subagent running that just sleeps for 5 minutes then completes. When it completes, you get a turn — use it to check all agents and launch a new watchdog. This ensures you never go more than 5 minutes without checking on things, even if the user is away.
+
 ## Conventions
 
 - Proof modules use postulated ℝ from `Real.agda`; executable modules use `Float`
