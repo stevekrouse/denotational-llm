@@ -17,17 +17,19 @@ Following Conal's [methodology](http://conal.net/papers/type-class-morphisms/): 
 
 ## Status
 
-**What's working:** Full specification stack, Kleisli category structure, architecture hierarchy, forward/reverse-mode AD, parameterized improvement, executable bigrams matching Karpathy's NLL = 2.454, MLP with backprop, and **a tensor algebra predictor T₂(ℝ^d) that beats Karpathy's MLP.** At d=16, T₂(ℝ¹⁶) achieves **NLL = 2.210** on all 32k names — better than Karpathy's MLP (~2.3) with only 200 training steps and no nonlinearity. The architecture is derived from the monoid structure of the score decomposition: the truncated tensor algebra is the universal finite-dimensional quotient of the free monoid.
+**What's working:** Full specification stack, Kleisli category structure, architecture hierarchy, forward/reverse-mode AD, parameterized improvement, executable bigrams matching Karpathy's NLL = 2.454, MLP with backprop, and **a tensor algebra predictor T₂(ℝ^d) that beats Karpathy's MLP.** At d=16, T₂(ℝ¹⁶) achieves **NLL = 2.247** on all 32k names — better than Karpathy's MLP (~2.3) with only 200 training steps and no nonlinearity. The architecture is derived from the monoid structure of the score decomposition: the truncated tensor algebra is the universal finite-dimensional quotient of the free monoid.
 
 **What's honest:** Most of the formalization verifies known things. Score decomposition is "log of a product = sum of logs." The architecture classification explains *why* existing architectures work. **But the tensor algebra result is genuinely new:** the monoid structure directly suggests T₂(ℝ^d) as state, and scaling the embedding dimension yields an architecture that outperforms standard MLPs. The caveat: T₂(ℝ¹⁶) has 8,262 parameters vs Karpathy's ~10k — the parameter counts are comparable, so the win is in training efficiency (200 steps vs ~200k) and architectural simplicity (no nonlinearity).
+
+**New: Attention from algebra.** We showed that T₂ and linear attention (Katharopoulos et al. 2020) are both monoid homomorphisms into the same algebraic structure — matrices under addition. T₂ is the special case where key=value=raw embedding; linear attention generalizes with learned projections. See `ATTENTION-ALGEBRA.md` for the full argument. Empirically, T₂(ℝ^8) at 2,430 params (NLL=2.279) beats linear attention at matched params (NLL=2.367), but the comparison is confounded: online training can't train the projection matrices (they need BPTT). The theory stands regardless — the algebra constrains state to be a monoid, suggests outer-product matrices, and explains why softmax attention breaks compositionality.
 
 **What's resolved:** The adequacy problem. `TrueSpec.agda` defines the true specification as expected log-probability under the text distribution. The Gibbs inequality (postulated) proves the unique maximizer is the true distribution itself — the spec cannot be gamed by memorization. The corpus-based score in `Spec.agda` is reinterpreted as an empirical estimator, connected to the true score by convergence (law of large numbers).
 
 ## Next steps
 
-1. **Higher-order tensors** — T₂ captures bigram correlations. Does T₃(ℝ^d) (adding trigram tensor) close the gap to 2.454? The algebra predicts each order adds polynomial interactions.
-2. **Prove tensor optimality** — T₂(ℝ^d) is the universal degree-2 quotient of the free monoid. Can we prove it's optimal among all monoids of that dimension?
-3. **Scale to Karpathy's MLP** — The JS implementation already matches makemore's bigram. Can the tensor approach match makemore's MLP (~2.3 NLL) by increasing d or tensor order?
+1. **Train projections with BPTT** — Linear attention's key/value projections can't be trained with our current online method (no gradient path). Implementing truncated BPTT would enable a fair comparison of learned projections vs raw embeddings within the monoid framework.
+2. **Higher-order tensors** — T₂ captures bigram correlations. Does T₃(ℝ^d) (adding trigram tensor) close the gap to Karpathy's RNN (~2.0)? The algebra predicts each order adds polynomial interactions.
+3. **Prove tensor optimality** — T₂(ℝ^d) is the universal degree-2 quotient of the free monoid. Can we prove it's optimal among all monoids of that dimension?
 4. **Close postulate gaps** — `gradient-ascent-lemma` postulates the punchline of `gradient-improves`; narrowing what's assumed would strengthen the formalization
 
 ## Module dependencies
@@ -85,6 +87,9 @@ Solid arrows are `open import` dependencies. Dotted arrows indicate that the exe
 | `MLPBig.agda` | MLP with larger hidden layer to compete with tensor algebra (baseline for comparison) |
 | `GroupSSM.agda` | S₃ group algebra SSM: null result showing non-abelian structure doesn't help at small scale |
 | `tensor-bigram.js` | Fast JS implementation: trains tensor + MLP on all 32k names in <5s (the real benchmark) |
+| `tensor-scaling.js` | Scaling experiments: T₂ at d=2,4,8,16 and T₃ at d=2,4 with systematic sweep |
+| `linear-attention.js` | Linear attention vs T₂ comparison: tests whether learned key/value/query projections beat raw embeddings |
+| `ATTENTION-ALGEBRA.md` | Theoretical argument: T₂ → linear attention → softmax attention as algebraic hierarchy |
 | `names.txt` | 32,032 names dataset from [Karpathy's makemore](https://github.com/karpathy/makemore) |
 
 ## Proven theorems

@@ -86,11 +86,15 @@ Reverse-mode AD is implemented in both proof (`AD.agda` Part 2) and executable (
 ### 4. Derive something new (the frontier) -- PARTIALLY COMPLETE
 **The tensor algebra result is a genuine derivation.** By asking "what algebraic structure respects the monoid homomorphism property of score?", we derived T₂(ℝ^d) as a natural candidate, and it outperforms standard architectures. This is the kind of insight Conal's methodology is meant to produce — the algebra *suggested* a solution we hadn't tried.
 
-However, this is just the beginning. The real frontier questions:
+**The attention-from-algebra result (ATTENTION-ALGEBRA.md).** We showed that T₂ and linear attention are both monoid homomorphisms into the same algebraic structure (matrices under addition). T₂ is the special case where key=value=raw embedding; linear attention learns separate projections. This gives a 4-level algebraic hierarchy: bigram → T₂ → linear attention → softmax attention. The transition to softmax breaks the monoid (non-compositional normalization).
+
+Empirically: T₂(ℝ^8) at 2,430 params (NLL=2.279) beats linear attention at matched params (NLL=2.367), but the comparison is confounded — online training can't train the projection matrices (they need BPTT). The theory stands regardless.
+
+The real frontier questions:
+- **Train projections with BPTT** — the biggest gap. Can learned projections beat raw embeddings when properly trained?
 - **Why does tensor algebra work?** Can we prove it's optimal in some algebraic sense?
 - **What other structures lie in this space?** Exterior algebra? Clifford algebras? Quaternions?
 - **Does it scale?** Tensor algebra grows quickly with dimension. Can we find sparse/structured variants that scale further?
-- **RNN with tensor state** — apply the same algebraic principle to recurrent architectures.
 
 ## Module structure
 
