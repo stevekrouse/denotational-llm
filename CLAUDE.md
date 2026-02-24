@@ -50,6 +50,11 @@ The empirical spec (`Spec.agda`) is still gameable, but it's now explicitly labe
 - The architecture "analogy" was weaker than the AD analogy, but the rank decomposition tightens it. In AD, forward/reverse are representation theorems (different ways to compute the same linear map) with a dimension argument (forward is O(n), reverse is O(m)). Now: multi-head readout is also a representation theorem (the unique form of linear readout from outer-product state) with a dimension argument (T₂ needs D=27, multi-head needs D ~ sqrt(params)). The analogy is now: both are "representation theorem + dimension argument". What remains weaker: different levels of the hierarchy (bigram vs T₂ vs attention) still compute *different functions*, unlike forward/reverse AD which compute the *same derivative*.
 - `gradient-improves` postulates its own punchline via `gradient-ascent-lemma`.
 
+**Derivation vs. Formalization:**
+- *Genuinely DERIVED:* score decomposition (proven), monoid homomorphism (proven), T₂ as universal algebraic state (from universal property of truncated tensor algebra), multi-head readout (from rank decomposition theorem)
+- *FORMALIZED but not derived:* architecture hierarchy (bigram ⊂ n-gram ⊂ RNN ⊂ attention are encoded in `Architectures.agda`, not discovered from the spec), Gibbs inequality (postulated), gradient ascent validity (postulated)
+- *IMPLEMENTATION-level insight:* tensor algebra beating MLP is an empirical finding, not an algebraic proof of optimality. The algebra *suggests* T₂ but does not *prove* it should outperform alternatives.
+
 **What we *have* derived (new!):**
 - The **tensor algebra result** (TensorBigram.agda): The monoid structure of score decomposition naturally suggests using a concrete algebraic object — a truncated tensor algebra T₂(ℝ^d) — as state. This falls out of asking "what is the simplest algebraic structure that respects the monoid homomorphism property?" The model:
   - Uses T₂(ℝ^d) ≅ ℝ × ℝ^d × sym(d×d) as state (d dimensions: 1 + d + d(d+1)/2 = (d+2)(d+1)/2 elements)
@@ -68,6 +73,9 @@ The empirical spec (`Spec.agda`) is still gameable, but it's now explicitly labe
 - Positional encoding: our models are position-blind (monoid = order-insensitive accumulation). How does position information enter the algebraic picture?
 - The executable tensor modules use Float and aren't formally connected to the proof modules (but the algebra is sound)
 - The Gibbs inequality and convergence are postulated, not proven.
+- Can we DERIVE architecture choices rather than just formalize known ones? This is the real Conal challenge — `Architectures.agda` encodes the known hierarchy but does not discover it from the spec.
+- Prove Gibbs inequality for finite alphabets (feasible — finite sums, no measure theory needed).
+- Narrow the `gradient-ascent-lemma` postulate — can we at least prove it for specific parameterizations (e.g., softmax output layer)?
 
 ## Goals
 
@@ -118,17 +126,13 @@ The real frontier questions:
 - `Parameterize.agda` — parameter search, gradient ascent validity
 
 **Executable (use Float, not postulated ℝ):**
-- `Bigram.agda` — small gradient-descent bigram (10 names)
 - `BigramCount.agda` — count-based MLE bigram (32k names, NLL = 2.454)
-- `BigramAD.agda` — bigram with forward-mode AD training (10 names)
-- `MLP.agda` — MLP with context window, embeddings, hidden layer (small corpus, 209 params)
-- `ReverseAD.agda` — bigram with reverse-mode AD training (1 pass for full gradient vs 729)
-- `MLPREV.agda` — MLP with explicit backprop reverse-mode AD (closure-based approach failed; explicit works)
-- `TensorBigram.agda` — **NEW: Truncated tensor algebra T₂(ℝ^d) state monoid with linear logits (162 params, beats MLP on all settings)**
-- `TensorSmall.agda` — Tensor algebra model on small corpus (debugging, ablations)
-- `MLPBig.agda` — MLP with larger hidden layer (baseline comparison for tensor results)
-- `GroupSSM.agda` — **NEW: S₃ group algebra SSM (null result: non-abelian structure doesn't help at small scale)**
-- `linear-attention.js` — T₂, linear attention, ProjT2, and multi-head ProjT2 experiments (JavaScript, runs with Node.js, contains the rank decomposition / multi-head results)
+- `ReverseAD.agda` — bigram with reverse-mode AD (demonstrates 729x speedup)
+- `MLPREV.agda` — MLP with explicit backprop reverse-mode AD
+- `TensorBigram.agda` — T₂(ℝ^d) state monoid (162 params, beats MLP)
+- `linear-attention.js` — T₂, linear attention, ProjT2, multi-head experiments
+
+Archived modules (Bigram, BigramAD, MLP, TensorSmall, MLPBig, MLPScale, TensorScale, GroupSSM) are in `archive/`.
 
 ## Workflow conventions
 
@@ -180,7 +184,7 @@ The top-level Claude agent should NOT do heavy work (writing Agda, long compilat
 # All proof modules (order matters for dependencies)
 agda Spec.agda && agda TrueSpec.agda && agda Properties.agda && \
 agda Kleisli.agda && agda Architectures.agda && agda AD.agda && \
-agda Parameterize.agda
+agda Parameterize.agda && agda RankDecomposition.agda
 ```
 
 Compilation of `BigramCount.agda` reads `names.txt` at runtime and takes ~30s to compile.

@@ -4,16 +4,37 @@ Conal Elliott [showed](http://conal.net/papers/essence-of-ad/) that if you start
 
 **Can we do the same thing for text prediction?** Start with a precise specification of "getting better at predicting the next character," find the algebraic structure, and see what falls out?
 
-This repo is that attempt, formalized in Agda. We use Karpathy's [makemore](https://github.com/karpathy/makemore) as our concrete target — the same character-level name generation task, progressing from bigrams toward GPT-level architectures — but derived from algebraic specification rather than built up from neural network primitives.
+This repo is that attempt, formalized in Agda. We use Karpathy's [makemore](https://github.com/karpathy/makemore) as our concrete target — the same character-level name generation task, progressing from bigrams toward GPT-level architectures — but aiming to derive architecture from algebraic specification rather than building it up from neural network primitives.
 
 ## The approach
 
 Following Conal's [methodology](http://conal.net/papers/type-class-morphisms/): define the meaning precisely, require a homomorphism, and solve for the implementation. Concretely:
 
 1. **Specify** what "good predictor" means: `Predictor = List Char → Char → ℝ`, scored by expected log-probability under the true text distribution (`TrueSpec.agda`). The corpus-based score (`Spec.agda`) is the empirical estimator.
-2. **Find algebraic structure**: score is a monoid homomorphism from (List Char, ++) to (ℝ, +) — it decomposes over corpus concatenation
-3. **Classify representations**: restricting how the predictor uses history yields known architectures (bigram, n-gram, RNN, attention) as a strict hierarchy
-4. **Optimize**: gradient ascent on any parameterized family is a valid improvement strategy
+2. **Find algebraic structure**: score is a monoid homomorphism from (List Char, ++) to (ℝ, +) — it decomposes over corpus concatenation. This is *derived* by induction from list laws.
+3. **Classify representations**: restricting how the predictor uses history yields known architectures (bigram, n-gram, RNN, attention) as a strict hierarchy. These are *formalized* in Agda — the hierarchy is encoded, not derived from the spec.
+4. **Optimize**: gradient ascent on any parameterized family is a valid improvement strategy (relies on a postulated gradient-ascent lemma).
+
+## What's derived vs. what's formalized
+
+This distinction matters. Conal's methodology aims to *derive* implementations from specs. Some of what we have is genuinely derived; some is formalization of known things:
+
+**Genuinely derived (falls out of the algebra):**
+- Score decomposition over corpus concatenation — proven by induction from list laws (`Spec.agda`)
+- The monoid homomorphism structure of score — follows from decomposition (`Kleisli.agda`)
+- T₂(ℝ^d) as state — the universal property of the truncated tensor algebra makes it the natural algebraic candidate for monoid-homomorphic state
+- Multi-head readout structure — forced by rank decomposition of linear functionals on matrices (`RankDecomposition.agda`). Any linear readout from D x D state *must* decompose into rank-1 terms, each of which is an attention head
+- The algebraic hierarchy: bigram (diagonal) -> T₂ (full outer product) -> multi-head ProjT₂ (learned rank-H readout) -> linear attention (learned key/value/query)
+
+**Formalized but not derived:**
+- Architecture classification (bigram, n-gram, RNN, attention) — these are *encoded* as representation choices in `Architectures.agda`, not derived from the specification
+- The Gibbs inequality (adequacy of the true spec) — *postulated*, not proven. Standard information theory, feasible to prove for finite alphabets
+- Gradient ascent validity — `gradient-ascent-lemma` *postulates its own punchline*. The theorem `gradient-improves` is only as strong as this postulate
+- Forward/reverse-mode AD equivalence — postulated (standard result, but not proven here)
+
+**Implementation-level discovery (empirical, not spec-level):**
+- The tensor algebra predictor beating MLP — this is an empirical result from running the executable module, not a theorem about the specification
+- Multi-head ProjT₂ matching full-rank T₂ at half the parameters — empirical confirmation of the rank decomposition prediction
 
 ## Status
 
@@ -41,21 +62,13 @@ Both are the same mathematical move: take a linear object, choose a basis/decomp
 
 **What's working:** Full specification stack, Kleisli category structure, architecture hierarchy, forward/reverse-mode AD, parameterized improvement, executable bigrams matching Karpathy's NLL = 2.454, MLP with backprop, tensor algebra predictor T₂(R^d) that beats Karpathy's MLP, and multi-head projected T₂ derived from rank decomposition of the readout.
 
-**What's honest:** Most of the formalization verifies known things. Score decomposition is "log of a product = sum of logs." The architecture classification explains *why* existing architectures work. **But the tensor algebra and multi-head results are genuinely new:** the monoid structure suggests T₂(R^d) as state, rank decomposition of the readout gives multi-head attention, and the algebra predicts the smooth heads-vs-NLL tradeoff we observe empirically.
+**What's honest:** Most of the formalization verifies known things rather than deriving new ones. Score decomposition is "log of a product = sum of logs." The architecture classification *explains* why existing architectures work but does not *derive* them from the spec — the architectures are encoded as representation choices. **The tensor algebra and multi-head results are the closest to genuine derivation:** the monoid structure suggests T₂(ℝ^d) as state (via the universal property of tensor algebra), and rank decomposition of the readout forces multi-head attention. But even here, the empirical success of T₂ over MLP is an implementation-level discovery, not a spec-level theorem.
 
 **Attention from algebra.** T₂ and linear attention (Katharopoulos et al. 2020) are both monoid homomorphisms into matrices under addition. T₂ is the special case where key=value=raw embedding; linear attention generalizes with learned projections. The multi-head structure emerges from rank decomposition of the linear readout: a rank-H readout decomposes into H attention heads, each computing a query-key inner product. See [`docs/ATTENTION-ALGEBRA.md`](docs/ATTENTION-ALGEBRA.md) for the full algebraic argument. The hierarchy is: bigram (diagonal) --> T₂ (full outer product) --> multi-head ProjT₂ (learned rank-H readout) --> linear attention (learned key/value/query) --> softmax attention (breaks the monoid).
 
 **What's not derived:** softmax attention (the normalization breaks the monoid homomorphism), positional encoding, and optimal rank selection. The transition from linear to softmax attention is where the algebra stops — softmax introduces non-compositionality.
 
 **What's resolved:** The adequacy problem. `TrueSpec.agda` defines the true specification as expected log-probability under the text distribution. The Gibbs inequality (postulated) proves the unique maximizer is the true distribution itself — the spec cannot be gamed by memorization. The corpus-based score in `Spec.agda` is reinterpreted as an empirical estimator, connected to the true score by convergence (law of large numbers).
-
-## Next steps
-
-1. **Formalize the rank decomposition** — The multi-head result is currently empirical + informal argument. Formalizing "any linear functional on D x D matrices decomposes into rank-1 components" in Agda would make the AD parallel airtight.
-2. **Train full linear attention with BPTT** — Multi-head ProjT₂ learns queries but uses raw embeddings as key=value. Training separate key/value projections requires BPTT (no gradient path with online training). This is the next rung on the algebraic hierarchy.
-3. **Higher-order tensors** — T₂ captures bigram correlations. Does T₃(R^d) (adding trigram tensor) close the gap to Karpathy's RNN (~2.0)? The algebra predicts each order adds polynomial interactions.
-4. **Optimal rank selection** — The heads-vs-NLL curve shows diminishing returns. Is there an algebraic criterion for optimal rank, analogous to how AD selects forward vs reverse based on dimension?
-5. **Close postulate gaps** — `gradient-ascent-lemma` postulates the punchline of `gradient-improves`; narrowing what's assumed would strengthen the formalization
 
 ## Module dependencies
 
@@ -74,21 +87,18 @@ graph TD
     R --> Pa
     S --> TS[TrueSpec.agda]
     P --> TS
-    Pa -.-> B[Bigram.agda]
+    R --> RD[RankDecomposition.agda]
     Pa -.-> BC[BigramCount.agda]
-    Pa -.-> BAD[BigramAD.agda]
     Pa -.-> RAD[ReverseAD.agda]
-    Pa -.-> MLP[MLP.agda]
     Pa -.-> MLPREV[MLPREV.agda]
     Pa -.-> TB[TensorBigram.agda]
-    Pa -.-> TS[TensorSmall.agda]
-    Pa -.-> MLPB[MLPBig.agda]
-    Pa -.-> GSSM[GroupSSM.agda]
 ```
 
 Solid arrows are `open import` dependencies. Dotted arrows indicate that the executable modules follow the structure proven in the spec modules but use `Float` instead of postulated `ℝ`.
 
 ## Files
+
+### Proof modules
 
 | File | Description |
 |------|-------------|
@@ -101,22 +111,29 @@ Solid arrows are `open import` dependencies. Dotted arrows indicate that the exe
 | `Architectures.agda` | Bigram, n-gram, RNN, Attention as representation choices with embeddings |
 | `AD.agda` | Forward-mode and reverse-mode AD via dual numbers and continuations |
 | `Parameterize.agda` | Parameter families, gradient ascent validity |
-| `Bigram.agda` | Executable bigram trained by numerical gradient descent (10 names) |
-| `BigramCount.agda` | Executable count-based bigram via MLE (32k names, matches Karpathy's NLL = 2.454) |
-| `BigramAD.agda` | Executable bigram trained with forward-mode AD dual numbers (exact gradients) |
-| `ReverseAD.agda` | Executable reverse-mode AD bigram: one backward pass for full gradient (matches forward-mode) |
-| `MLP.agda` | Executable MLP: context window + embeddings + hidden layer + softmax (makemore part 2) |
-| `MLPREV.agda` | Executable MLP with reverse-mode AD (explicit backprop, 209x faster gradients) |
-| `TensorBigram.agda` | Executable tensor algebra bigram: T₂(ℝ^d) state monoid with linear logits (162 params, beats MLP) |
-| `TensorSmall.agda` | Tensor algebra model on small corpus for debugging and performance analysis |
-| `MLPBig.agda` | MLP with larger hidden layer to compete with tensor algebra (baseline for comparison) |
-| `GroupSSM.agda` | S₃ group algebra SSM: null result showing non-abelian structure doesn't help at small scale |
-| `linear-attention.js` | Linear attention vs T₂ comparison: tests whether learned key/value/query projections beat raw embeddings |
-| `docs/ATTENTION-ALGEBRA.md` | Theoretical argument: T₂ → linear attention → softmax attention as algebraic hierarchy |
+| `RankDecomposition.agda` | Rank decomposition of matrix readout: multi-head attention as representation theorem |
+
+### Executable modules
+
+| File | Description |
+|------|-------------|
+| `BigramCount.agda` | Count-based MLE bigram (32k names, matches Karpathy's NLL = 2.454) |
+| `ReverseAD.agda` | Reverse-mode AD bigram: one backward pass for full gradient (matches forward-mode) |
+| `MLPREV.agda` | MLP with reverse-mode AD (explicit backprop, 209x faster gradients) |
+| `TensorBigram.agda` | Tensor algebra bigram: T₂(ℝ^d) state monoid with linear logits (162 params, beats MLP) |
+| `linear-attention.js` | T₂, linear attention, ProjT2, and multi-head ProjT2 experiments (Node.js); contains the rank decomposition / multi-head empirical results |
+
+### Documentation and data
+
+| File | Description |
+|------|-------------|
+| `docs/ATTENTION-ALGEBRA.md` | Theoretical argument: T₂ -> linear attention -> softmax attention as algebraic hierarchy |
 | `docs/WHY-T2.md` | Why T₂ is the right state: universal property of tensor algebra |
-| `archive/tensor-bigram.js` | Fast JS implementation: trains tensor + MLP on all 32k names in <5s (superseded by linear-attention.js) |
-| `archive/tensor-scaling.js` | Scaling experiments: T₂ at d=2,4,8,16 and T₃ at d=2,4 (superseded by linear-attention.js) |
 | `names.txt` | 32,032 names dataset from [Karpathy's makemore](https://github.com/karpathy/makemore) |
+
+### Archive
+
+The `archive/` directory contains historical and experimental variants that have been superseded: earlier bigram implementations (`Bigram.agda`, `BigramAD.agda`), MLP variants (`MLP.agda`, `MLPBig.agda`, `MLPScale.agda`), tensor scaling experiments (`TensorSmall.agda`, `TensorScale.agda`), the S₃ group algebra SSM (`GroupSSM.agda`, a null result), and earlier JavaScript experiments.
 
 ## Proven theorems
 
@@ -150,12 +167,12 @@ Solid arrows are `open import` dependencies. Dotted arrows indicate that the exe
 | Postulate | Why | Severity |
 |-----------|-----|----------|
 | All of `Real.agda` | ℝ as an ordered field with log/exp — standard math axioms | Low — standard |
-| `gradient-ascent-lemma` | Requires formalizing multivariable calculus | High — this postulates the punchline of `gradient-improves` |
+| `gradient-ascent-lemma` | Requires formalizing multivariable calculus | **High — this postulates the punchline of `gradient-improves`** |
 | `jensen-log` | Requires formalizing concavity of log | Medium |
 | `log-prob-is-score` | Requires threading positivity proofs (tedious) | Low |
 | `attn-subsumes-rnn` | Needs auxiliary lemmas about `enumerate` | Low |
 | `trueScore` | Abstract expected log-prob under distribution (requires measure theory to define) | Medium — the right abstraction |
-| `gibbs`, `gibbs-strict` | KL divergence non-negativity; the key adequacy result | Medium — standard information theory |
+| `gibbs`, `gibbs-strict` | KL divergence non-negativity; the key adequacy result | Medium — standard information theory, feasible to prove for finite alphabets |
 | `empirical-convergence` | Law of large numbers connecting empirical to true score | Medium — requires measure theory |
 | `reverse-equals-forward` | Forward-mode and reverse-mode compute same derivative | Low — standard AD result |
 | `rev-gradient-correct` | Reverse gradient equals true gradient | Low — follows from above |
@@ -168,29 +185,47 @@ Requires [Agda](https://wiki.portal.chalmers.se/agda/Main/Download) with the [st
 # Type-check all proof modules
 agda Spec.agda && agda TrueSpec.agda && agda Properties.agda && \
 agda Kleisli.agda && agda Architectures.agda && agda AD.agda && \
-agda Parameterize.agda
-
-# Compile and run the small bigram (gradient descent on 10 names)
-agda --compile Bigram.agda && ./Bigram
+agda Parameterize.agda && agda RankDecomposition.agda
 
 # Compile and run the count-based bigram (MLE on 32k names)
 agda --compile BigramCount.agda && ./BigramCount
 
-# Compile and run the AD-trained bigram (forward-mode dual numbers)
-agda --compile BigramAD.agda && ./BigramAD
-
 # Compile and run the reverse-mode AD bigram (continuations)
 agda --compile ReverseAD.agda && ./ReverseAD
 
-# Compile and run the MLP (context window + embeddings + hidden layer)
-agda --compile MLP.agda && ./MLP
-
 # Compile and run the MLP with reverse-mode AD training (explicit backprop)
 agda --compile MLPREV.agda && ./MLPREV
+
+# Compile and run the tensor algebra model
+agda --compile TensorBigram.agda && ./TensorBigram
+
+# Run the linear attention / multi-head experiments (Node.js)
+node linear-attention.js
 ```
 
 ## References
 
 - Conal Elliott, [*The Simple Essence of Automatic Differentiation*](http://conal.net/papers/essence-of-ad/) (2018) — the methodological template: differentiation as a functor, representations of linear maps give AD algorithms
 - Conal Elliott, [*Compiling to Categories*](http://conal.net/papers/compiling-to-categories/) (2017) — the general methodology: define meaning, require homomorphism, solve for implementation
-- Andrej Karpathy, [makemore](https://github.com/karpathy/makemore) — the character-level name generation series (bigram → MLP → RNN → GPT); our concrete target task and performance benchmark
+- Andrej Karpathy, [makemore](https://github.com/karpathy/makemore) — the character-level name generation series (bigram -> MLP -> RNN -> GPT); our concrete target task and performance benchmark
+- Katharopoulos et al., [*Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention*](https://arxiv.org/abs/2006.16236) (2020) — the connection between linear attention and monoid-homomorphic state
+
+## Open questions / TODOs
+
+These are the real frontiers — the places where the formalization is incomplete or the algebra runs out:
+
+1. **Prove Gibbs inequality for finite alphabets.** This is feasible: combinatorial information theory over a 27-character alphabet. Would eliminate the most important postulate and make the adequacy result fully formal.
+
+2. **Prove gradient ascent from convexity/differentiability.** The `gradient-ascent-lemma` postulates the punchline. Can we narrow what's assumed? At minimum, postulate differentiability and convexity separately, then derive the improvement.
+
+3. **Characterize what softmax adds algebraically.** Softmax attention breaks the monoid homomorphism (non-compositional normalization). Why does it help? Is there a compositional approximation that preserves the monoid while capturing the benefits?
+
+4. **Derive positional encoding from the algebra.** Monoid accumulation is order-insensitive — the state cannot distinguish "abc" from "bac." How does position information enter the algebraic picture? This is a fundamental limitation of the monoid framework.
+
+5. **Optimal rank / head count.** The rank decomposition forces multi-head form, but what determines the right H? Is there an algebraic criterion, analogous to how AD selects forward vs reverse based on input/output dimension?
+
+6. **Formal connection between proof and executable modules.** The proof modules use postulated `ℝ` from `Real.agda`; the executable modules use `Float`. These are separate worlds. Can we bridge them (e.g., by instantiating the proofs with a verified Float model)?
+
+7. **Higher-order tensors.** T₂ captures bigram (pairwise) correlations. Does T₃(ℝ^d) — adding a third-order tensor to the state — close the gap to RNN-level performance (~2.0 NLL)? The algebra predicts each order adds polynomial interactions, but the parameter count grows quickly.
+
+8. **Can we DERIVE architecture choices rather than encode them?** This is the real Conal challenge. Currently, `Architectures.agda` *encodes* bigram/n-gram/RNN/attention as representation choices. The dream is that the algebra *forces* these choices — that restricting the homomorphism in various ways uniquely determines the architecture, the way the AD algebra uniquely determines forward and reverse mode. The tensor algebra / rank decomposition results are steps in this direction, but the full program remains open.
